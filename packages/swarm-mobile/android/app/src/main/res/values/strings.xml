@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">蜂群</string>
+    <string name="title_activity_main">蜂群</string>
+    <string name="package_name">com.swarm.mobile</string>
+    <string name="custom_url_scheme">com.swarm.mobile</string>
+</resources>

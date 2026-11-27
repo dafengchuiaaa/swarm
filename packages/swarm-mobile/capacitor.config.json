@@ -1,0 +1,13 @@
+{
+  "appId": "com.swarm.mobile",
+  "appName": "蜂群",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true,
+    "allowNavigation": ["*"]
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

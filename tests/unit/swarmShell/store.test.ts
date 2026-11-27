@@ -1,0 +1,133 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { SwarmStore } from '../../../packages/swarm-shell/src/main/store';
+
+const dirs: string[] = [];
+
+function openStore(): { dir: string; store: SwarmStore } {
+  const dir = mkdtempSync(path.join(tmpdir(), 'swarm-store-'));
+  dirs.push(dir);
+  return { dir, store: new SwarmStore(dir) };
+}
+
+afterEach(() => {
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+function seed(store: SwarmStore) {
+  const project = store.createProject('蜂群任务', 'D:/work/example');
+  const session = store.createSession({ projectId: project.id, memberLabel: '开发', host: 'CodeBuddy', model: 'hy3' });
+  store.bindHostSession(session.id, 'host-session-1');
+  return { project, session };
+}
+
+describe('会话整理状态', () => {
+  it('改名、置顶、分组、归档落库，重启后保持，且不改写成员和宿主续接 ID', () => {
+    const { dir, store } = openStore();
+    const { project, session } = seed(store);
+    const meta = store.updateConversationMeta({
+      projectId: project.id,
+      sessionId: session.id,
+      title: '发行核查',
+      pinned: true,
+      groupName: '发行',
+    });
+    expect(meta.pinned).toBe(1);
+    expect(meta.archived).toBe(0);
+    store.close();
+
+    const reopened = new SwarmStore(dir);
+    const list = reopened.listConversationMeta(project.id);
+    expect(list).toHaveLength(1);
+    expect(list[0].title).toBe('发行核查');
+    expect(list[0].group_name).toBe('发行');
+
+    const record = reopened.session(session.id)!;
+    expect(record.member_label).toBe('开发');
+    expect(record.host).toBe('CodeBuddy');
+    expect(record.host_session_id).toBe('host-session-1');
+
+    const archived = reopened.updateConversationMeta({ projectId: project.id, sessionId: session.id, archived: true, pinned: false });
+    expect(archived.pinned).toBe(0);
+    expect(archived.archived).toBe(1);
+    expect(archived.group_name).toBe('发行');
+    expect(archived.title).toBe('发行核查');
+    reopened.close();
+  });
+
+  it('只改分组时不动标题，只改标题时不动分组', () => {
+    const { store } = openStore();
+    const { project, session } = seed(store);
+    store.updateConversationMeta({ projectId: project.id, sessionId: session.id, title: '标题 A', groupName: '组 A' });
+    const second = store.updateConversationMeta({ projectId: project.id, sessionId: session.id, groupName: '组 B' });
+    expect(second.title).toBe('标题 A');
+    expect(second.group_name).toBe('组 B');
+    const third = store.updateConversationMeta({ projectId: project.id, sessionId: session.id, title: '标题 B' });
+    expect(third.group_name).toBe('组 B');
+    expect(third.title).toBe('标题 B');
+    store.close();
+  });
+});
+
+describe('会话内搜索', () => {
+  it('只沿同一会话的回合检索提问、回复和正文事件，按回合先后返回', () => {
+    const { store } = openStore();
+    const { project, session } = seed(store);
+    const other = store.createSession({ projectId: project.id, memberLabel: '验收', host: 'CodeBuddy', model: 'hy3' });
+
+    const first = store.startRun({ projectId: project.id, sessionId: session.id, prompt: '排查缓存问题' });
+    store.appendEvent(first.id, 1, 'reasoning', '先确认缓存键');
+    store.appendEvent(first.id, 2, 'chunk', '缓存');
+    store.finishRun(first.id, 'done', '已经修好缓存', '', 1.2);
+    const second = store.startRun({ projectId: project.id, sessionId: session.id, prompt: '再检查缓存命中率' });
+    store.finishRun(second.id, 'done', '无新增问题', '', 0.8);
+    const outside = store.startRun({ projectId: project.id, sessionId: other.id, prompt: '缓存不是这条会话的' });
+    store.finishRun(outside.id, 'done', '', '', 0.1);
+
+    const hits = store.searchSession(session.id, '缓存');
+    expect(hits.map(hit => [hit.runId, hit.field])).toEqual([
+      [first.id, 'prompt'],
+      [first.id, 'reply'],
+      [first.id, 'reasoning'],
+      [first.id, 'chunk'],
+      [second.id, 'prompt'],
+    ]);
+    expect(hits[0].index).toBe(2);
+    expect(hits.every(hit => hit.runId !== outside.id)).toBe(true);
+    expect(store.searchSession(session.id, '   ')).toEqual([]);
+
+    const rounds = store.sessionRuns(session.id);
+    expect(rounds.map(run => run.id)).toEqual([first.id, second.id]);
+    store.close();
+  });
+
+  it('英文关键词忽略大小写，同一段正文的多次命中按位置排列', () => {
+    const { store } = openStore();
+    const { project, session } = seed(store);
+    const run = store.startRun({ projectId: project.id, sessionId: session.id, prompt: 'Fix Cache and cache again' });
+    store.finishRun(run.id, 'done', 'cache fixed', '', 0.5);
+    const hits = store.searchSession(session.id, 'CACHE');
+    expect(hits.map(hit => [hit.field, hit.index])).toEqual([
+      ['prompt', 4],
+      ['prompt', 14],
+      ['reply', 0],
+    ]);
+    store.close();
+  });
+});
+
+describe('会话回合读取', () => {
+  it('分享用的回合列表包含提问和回复，按时间正序', () => {
+    const { store } = openStore();
+    const { project, session } = seed(store);
+    const first = store.startRun({ projectId: project.id, sessionId: session.id, prompt: '第一问' });
+    store.finishRun(first.id, 'done', '第一答', '', 1);
+    const second = store.startRun({ projectId: project.id, sessionId: session.id, prompt: '第二问' });
+    store.finishRun(second.id, 'failed', '第二答不完整', '宿主中断', 2);
+    const rounds = store.sessionRuns(session.id);
+    expect(rounds.map(run => [run.prompt, run.reply_text])).toEqual([['第一问', '第一答'], ['第二问', '第二答不完整']]);
+    store.close();
+  });
+});

@@ -1,0 +1,189 @@
+{
+  "CodeBuddy": [
+    [
+      "Hy4 preview",
+      "hy4-preview"
+    ],
+    [
+      "Hy3",
+      "hy3"
+    ],
+    [
+      "Hy3",
+      "hy3-x"
+    ],
+    [
+      "DeepSeek-V4.1-Flash",
+      "deepseek-v4.1-flash"
+    ],
+    [
+      "GLM-5.3",
+      "glm-5.3"
+    ],
+    [
+      "GLM-5.3-Flash",
+      "glm-5.3-flash"
+    ],
+    [
+      "GLM-5.2",
+      "glm-5.2"
+    ],
+    [
+      "Space-Bunny",
+      "space-bunny"
+    ],
+    [
+      "MiniMax-M3.1-Flash",
+      "minimax-m3.1-flash"
+    ],
+    [
+      "MiniMax-M2.7",
+      "minimax-m2.7"
+    ],
+    [
+      "Kimi-K3.1-Pro",
+      "kimi-k3.1-pro"
+    ],
+    [
+      "Kimi-K3",
+      "kimi-k3-1"
+    ],
+    [
+      "Kimi-K2.8-Preview",
+      "kimi-k2.8-preview"
+    ],
+    [
+      "DeepSeek-V4-Pro",
+      "deepseek-v4-pro"
+    ],
+    [
+      "Step-5-Preview",
+      "step-5-preview"
+    ],
+    [
+      "Xiaomi MiMo-V2.6-Pro",
+      "mimo-v2.6-pro"
+    ]
+  ],
+  "CodeBuddyThoughtLevels": {
+    "hy4-preview": [
+      "high",
+      "enabled"
+    ],
+    "hy3": [
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "enabled"
+    ],
+    "hy3-x": [
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "enabled"
+    ],
+    "deepseek-v4.1-flash": [
+      "low",
+      "high",
+      "max",
+      "enabled"
+    ],
+    "glm-5.3": [
+      "low",
+      "high",
+      "max",
+      "enabled"
+    ],
+    "glm-5.3-flash": [
+      "low",
+      "high",
+      "max",
+      "enabled"
+    ],
+    "glm-5.2": [
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "enabled"
+    ],
+    "space-bunny": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "enabled"
+    ],
+    "minimax-m3.1-flash": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "enabled"
+    ],
+    "minimax-m2.7": [
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "enabled"
+    ],
+    "kimi-k3.1-pro": [
+      "low",
+      "high",
+      "max",
+      "enabled"
+    ],
+    "kimi-k3-1": [
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "enabled"
+    ],
+    "kimi-k2.8-preview": [
+      "low",
+      "high",
+      "max",
+      "enabled"
+    ],
+    "deepseek-v4-pro": [
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "enabled"
+    ],
+    "step-5-preview": [
+      "low",
+      "medium",
+      "high",
+      "enabled"
+    ],
+    "mimo-v2.6-pro": [
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "enabled"
+    ]
+  }
+}

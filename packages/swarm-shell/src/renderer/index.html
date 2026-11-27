@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+    <title>蜂群</title>
+  </head>
+  <body>
+    <div class="app home-mode">
+      <div class="titlebar">
+        <svg class="titlebar-hex" viewBox="0 0 12 13" aria-hidden="true"><path d="M6 0l6 3.25v6.5L6 13 0 9.75v-6.5Z"/></svg>
+        <div class="win-controls">
+          <button id="win-min" type="button" title="最小化" aria-label="最小化"><svg viewBox="0 0 11 11" aria-hidden="true"><path d="M1 5.5h9"/></svg></button>
+          <button id="win-max" type="button" title="最大化 / 还原" aria-label="最大化或还原"><svg class="ic-max" viewBox="0 0 11 11" aria-hidden="true"><rect x="1.5" y="1.5" width="8" height="8" rx="1"/></svg><svg class="ic-restore" viewBox="0 0 11 11" aria-hidden="true"><rect x="1.5" y="3.5" width="7" height="7" rx="1"/><path d="M3.5 1.5h6v6"/></svg></button>
+          <button id="win-close" type="button" title="关闭" aria-label="关闭"><svg viewBox="0 0 11 11" aria-hidden="true"><path d="M1.5 1.5l8 8M9.5 1.5l-8 8"/></svg></button>
+        </div>
+      </div>
+      <button id="restore-sidebar" class="restore-sidebar" type="button" aria-label="展开会话栏" title="展开会话栏"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 3l5 5-5 5M9 3l5 5-5 5"/></svg></button>
+      <aside class="sidebar">
+        <div class="rail-top">
+          <button id="rail-home" class="rail-home" type="button" title="回到主页" aria-label="回到主页">
+            <span class="brand-tile"><img class="brand-mark" src="../../assets/swarm.ico?no-inline" alt="" /></span>
+            <span class="rail-home-name">蜂群</span>
+          </button>
+          <span class="rail-top-actions">
+            <button id="toggle-sidebar" class="ghost icon-button" type="button" title="收起侧栏" aria-label="收起侧栏"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 3v10"/></svg></button>
+            <button id="nav-back" class="ghost icon-button" type="button" title="后退" aria-label="后退" disabled><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8H3M7 4L3 8l4 4"/></svg></button>
+            <button id="nav-forward" class="ghost icon-button" type="button" title="前进" aria-label="前进" disabled><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></button>
+            <button id="rail-search" class="ghost icon-button" type="button" title="搜索会话 (Ctrl+K)" aria-label="搜索会话" aria-pressed="false"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg></button>
+          </span>
+        </div>
+        <div id="rail-search-bar" class="rail-search-bar" hidden>
+          <input id="rail-search-input" type="search" placeholder="搜索会话或项目…" aria-label="搜索会话或项目" />
+        </div>
+        <button id="new-task" class="new-task"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11"/></svg> 新建任务</button>
+        <div class="rail-scroll">
+          <section class="rail-section">
+            <div class="rail-head">
+              <span>项目列表</span>
+              <span class="rail-head-actions">
+                <button id="toggle-projects-archived" class="ghost icon-button" type="button" aria-pressed="false" title="显示已归档项目" aria-label="显示已归档项目"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12M4 3v9.5L8 10l4 2.5V3"/></svg></button>
+                <button id="pick-workspace" class="ghost icon-button" title="添加项目" aria-label="添加项目"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5h4l1.5 1.5H14v7H2Z"/><path d="M8 7.5v3M6.5 9h3"/></svg></button>
+              </span>
+            </div>
+            <ul id="project-list" class="rail-list"></ul>
+          </section>
+
+          <section class="rail-section">
+            <div class="rail-head">
+              <span>最近</span>
+              <span class="rail-head-actions">
+                <button id="toggle-archived" class="ghost icon-button" type="button" aria-pressed="false" title="显示已归档会话" aria-label="显示已归档会话"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12v3H2ZM3.5 6v7h9V6M6.5 8.5h3"/></svg></button>
+                <button id="rail-add-member" class="ghost icon-button" title="添加成员会话" aria-label="添加成员会话"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11"/></svg></button>
+              </span>
+            </div>
+            <ul id="task-list" class="rail-list"></ul>
+          </section>
+        </div>
+
+        <section class="quota-rail" aria-label="账户额度">
+          <div class="side-head"><span>账户额度</span><button id="quota-refresh" class="ghost icon-button" title="刷新额度" aria-label="刷新额度"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button></div>
+          <div id="quota-list" class="quota-list"></div>
+          <div id="side-foot" class="side-foot" hidden></div>
+        </section>
+        <div class="side-footer">
+          <button id="open-settings" class="ghost foot-btn" type="button"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6L11 5M5 11l-1.4 1.4"/></svg>设置</button>
+          <button id="open-mobile" class="ghost foot-btn" type="button" title="手机连接与状态提醒"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="2" width="8" height="12" rx="1.5"/><circle cx="8" cy="11.5" r="0.75" fill="currentColor" stroke="none"/></svg>手机连接</button>
+        </div>
+        <div id="rail-resizer" class="rail-resizer" title="拖动调整侧栏宽度"></div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div class="identity">
+            <div id="project-title" class="project-title">工作台</div>
+            <div id="channel-title" class="muted" hidden></div>
+          </div>
+          <div class="controls">
+            <div id="round-nav" class="round-nav" hidden>
+              <button id="round-prev" class="ghost" type="button" aria-label="上一回合" title="上一回合"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3L5 8l5 5"/></svg></button>
+              <span class="select-wrap"><select id="round-select" aria-label="切换回合"></select></span>
+              <button id="round-next" class="ghost" type="button" aria-label="下一回合" title="下一回合"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg></button>
+            </div>
+            <div class="view-tabs" aria-label="工作区视图">
+              <button id="open-runs" aria-pressed="true" title="切换成员会话">成员</button>
+              <button id="open-team" aria-pressed="false">留言板</button>
+            </div>
+            <button id="share-conversation" class="ghost" hidden>分享</button>
+            <button id="result-inbox-open" class="ghost" type="button" hidden>信箱</button>
+            <button id="open-board" class="ghost" hidden>共享板</button>
+            <button id="open-public-board" class="ghost" hidden title="只读围观全员工作过程">过程看板</button>
+            <button id="session-reattach" class="ghost reattach-chip" hidden title="把这条会话收回主窗口"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5l-5 5M6.5 13.5h-4v-4M2.5 13.5l5-5"/></svg>收回主窗口</button>
+            <button id="topbar-search" class="ghost icon-button" type="button" data-tip="在会话内搜索 (Ctrl+F)" aria-label="在会话内搜索" hidden><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg></button>
+            <button id="toggle-results" class="ghost icon-button" type="button" aria-expanded="true" data-tip="打开右侧面板 (Ctrl+Shift+B)" aria-label="打开右侧面板"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M10 3v10"/></svg></button>
+          </div>
+        </header>
+
+        <section id="home" class="home" aria-label="开始任务">
+          <svg class="comb-bg" aria-hidden="true">
+            <defs>
+              <pattern id="hexp" width="27.7128" height="48" patternUnits="userSpaceOnUse">
+                <path d="M13.8564 0L0 8v16l13.8564 8 13.8564-8V8Z M13.8564 32v16" fill="none" stroke="currentColor" stroke-width="1"/>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#hexp)"/>
+          </svg>
+          <form id="home-form" class="home-launch">
+            <div class="home-overline"><svg viewBox="0 0 12 13" aria-hidden="true"><path d="M6 0l6 3.25v6.5L6 13 0 9.75v-6.5Z"/></svg>Swarm Online · 赛博蜂群协作台</div>
+            <h1>今天想做什么？</h1>
+            <p class="home-sub">一句话派活给蜂群成员，回合、思考与成果都会留档在这台机器上。</p>
+            <div class="home-team-entry">
+              <button id="open-team-builder" class="ghost team-entry" type="button"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm5 1a1.7 1.7 0 1 0 0 3.4 1.7 1.7 0 0 0 0-3.4ZM2 13c0-2 1.6-3.2 3.5-3.2S9 11 9 13M9.5 13c0-1.6.9-2.7 2.3-2.7 1.1 0 2 .6 2.2 1.7"/></svg>自定义团队</button>
+              <span class="muted">自己选主导者和成员分工，再开跑</span>
+            </div>
+            <div class="home-composer">
+              <textarea id="home-prompt" rows="4" placeholder="用一句话描述任务" aria-label="任务目标" required></textarea>
+              <div class="home-controls">
+                <span class="select-wrap"><select id="home-host" aria-label="宿主"></select></span>
+                <button id="home-model-picker" class="model-trigger" type="button">选择模型</button>
+                <select id="home-model" hidden></select>
+                <select id="home-effort" hidden></select>
+                <button id="home-send" class="primary" type="submit" title="开始任务">开始 <svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg></button>
+              </div>
+            </div>
+            <div class="home-chips">
+              <button class="chip-suggest" type="button" data-prompt="把最近几次会话的结论整理成一份周报，列出决定与待办"><svg viewBox="0 0 12 13" aria-hidden="true"><path d="M6 0l6 3.25v6.5L6 13 0 9.75v-6.5Z"/></svg>整理会话结论成周报</button>
+              <button class="chip-suggest" type="button" data-prompt="跑一遍本仓库的构建与测试，把失败项和原因列给我"><svg viewBox="0 0 12 13" aria-hidden="true"><path d="M6 0l6 3.25v6.5L6 13 0 9.75v-6.5Z"/></svg>跑构建与测试并列失败项</button>
+              <button class="chip-suggest" type="button" data-prompt="给蜂群写一段产品落地页文案，含标题、三个卖点与行动号召"><svg viewBox="0 0 12 13" aria-hidden="true"><path d="M6 0l6 3.25v6.5L6 13 0 9.75v-6.5Z"/></svg>写落地页文案与卖点</button>
+            </div>
+            <div class="home-hints">
+              <span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> 发送</span>
+              <span><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> 侧栏</span>
+              <span><kbd>Ctrl</kbd>+<kbd>F</kbd> 会话内搜索</span>
+            </div>
+          </form>
+        </section>
+
+        <section id="collaboration" class="work-view" hidden>
+        <div id="channel-bar" class="channel-bar">
+          <div id="channel-chips" class="channel-chips" role="tablist" aria-label="频道与私信"></div>
+          <div class="channel-actions">
+            <button id="channel-new" class="ghost" type="button">新建频道</button>
+            <button id="channel-invite" class="ghost" type="button" hidden>加成员</button>
+            <button id="channel-archive" class="ghost" type="button" hidden>归档</button>
+            <button id="channel-archived" class="ghost" type="button" aria-pressed="false" hidden>已归档</button>
+          </div>
+          <button id="add-member" class="ghost icon-button" title="添加成员" aria-label="添加成员"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11"/></svg></button>
+        </div>
+        <div id="stream" class="stream"></div>
+        <footer class="composer">
+          <textarea id="prompt" rows="2" placeholder="在留言板说点什么，或 @成员 派一件需要行动的事（Ctrl+Enter 发送）"></textarea>
+          <div class="composer-actions">
+            <span id="composer-hint" class="muted"></span>
+            <button id="send" class="primary">发送</button>
+          </div>
+        </footer>
+        </section>
+        <section id="runs-panel" class="work-view" hidden>
+          <div id="search-bar" class="search-bar" hidden>
+            <input id="search-input" type="search" placeholder="在本会话全部回合里搜索" aria-label="会话内搜索" />
+            <span id="search-count" class="muted" role="status"></span>
+            <button id="search-prev" class="ghost" type="button" title="上一个匹配" aria-label="上一个匹配"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg></button>
+            <button id="search-next" class="ghost" type="button" title="下一个匹配" aria-label="下一个匹配"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5"/></svg></button>
+            <button id="search-close" class="ghost" type="button">关闭</button>
+          </div>
+          <div id="transcript" class="transcript"></div>
+          <footer id="task-composer" class="composer task-composer" hidden>
+            <div class="composer-card">
+              <textarea id="run-prompt" rows="2" aria-label="任务指令" placeholder="描述任务，或继续补充要求…"></textarea>
+              <div class="composer-actions">
+                <div class="controls drawer-controls">
+                  <button id="run-model-picker" class="model-trigger" type="button">选择模型</button>
+                  <select id="model-select" hidden></select>
+                  <select id="effort-select" hidden></select>
+                </div>
+                <span id="run-hint" class="muted"></span>
+                <button id="run-stop" class="danger" hidden>停止</button>
+                <button id="run-send" class="primary">发送 <svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg></button>
+              </div>
+            </div>
+          </footer>
+        </section>
+      </main>
+
+      <aside id="inspector" class="inspector" aria-label="侧栏" hidden>
+        <div id="inspector-resizer" class="inspector-resizer" title="拖动调整侧栏宽度"></div>
+        <header class="inspector-head">
+          <div class="inspector-tabs" role="tablist" aria-label="侧栏内容">
+            <button id="insp-tab-files" type="button" aria-pressed="true">产出</button>
+            <button id="insp-tab-preview" type="button" aria-pressed="false" hidden>预览</button>
+            <button id="insp-tab-session" type="button" aria-pressed="false">会话</button>
+            <button id="insp-tab-thread" type="button" aria-pressed="false" hidden>讨论</button>
+          </div>
+          <div class="inspector-actions">
+            <button id="insp-swap" class="ghost icon-button" type="button" hidden title="与主会话交换位置" aria-label="与主会话交换位置"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 5.5h9M9 3l2.5 2.5L9 8M13.5 10.5h-9M7 8l-2.5 2.5L7 13"/></svg></button>
+            <button id="insp-detach" class="ghost icon-button" type="button" title="拆出为独立窗口" aria-label="拆出为独立窗口"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 2.5h-4v11h11v-4M9.5 2.5h4v4M13.5 2.5l-6 6"/></svg></button>
+            <button id="insp-close" class="ghost icon-button" type="button" title="收起侧栏" aria-label="收起侧栏"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+          </div>
+        </header>
+        <div id="insp-body-files" class="inspector-body">
+          <div class="inspector-sub"><span class="muted">交付的文件</span><span id="result-count" class="count" hidden></span></div>
+          <div id="result-list" class="result-list"></div>
+        </div>
+        <div id="insp-body-preview" class="inspector-body" hidden>
+          <div class="preview-head">
+            <strong id="preview-name" class="preview-name"></strong>
+            <span class="preview-actions">
+              <button id="preview-open" class="ghost mini-btn" type="button">系统打开</button>
+              <button id="preview-reveal" class="ghost mini-btn" type="button">所在目录</button>
+            </span>
+          </div>
+          <div id="preview-body" class="preview-body"></div>
+        </div>
+        <div id="insp-body-session" class="inspector-body inspector-session" hidden>
+          <div class="inspector-sub session-sub">
+            <strong id="insp-session-name"></strong>
+            <span id="insp-session-status" class="status"></span>
+          </div>
+          <nav id="insp-members" class="insp-members" aria-label="切换右侧成员"></nav>
+          <div id="insp-transcript" class="transcript mini"></div>
+          <footer class="composer mini-composer">
+            <div class="composer-card">
+              <textarea id="insp-prompt" rows="2" aria-label="给这位成员补充要求" placeholder="给这位成员补充要求…（Ctrl+Enter 发送）"></textarea>
+              <div class="composer-actions">
+                <span id="insp-hint" class="muted"></span>
+                <button id="insp-send" class="primary" type="button">发送 <svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg></button>
+              </div>
+            </div>
+          </footer>
+        </div>
+        <div id="insp-body-thread" class="inspector-body thread-wrap" hidden>
+          <div class="inspector-sub"><span id="thread-sub" class="muted"></span></div>
+          <div id="thread-body" class="thread-body"></div>
+          <footer class="thread-composer">
+            <textarea id="thread-input" rows="2" placeholder="回复这条留言（Ctrl+Enter 发送，会回到同一串）"></textarea>
+            <div class="composer-actions">
+              <span id="thread-hint" class="muted"></span>
+              <button id="thread-send" class="primary">回复这条</button>
+            </div>
+          </footer>
+          <div class="thread-actions">
+            <label title="派给某个成员单独执行，产出记在那位成员名下，不回到本帖">派给成员执行<span class="select-wrap"><select id="dispatch-target"></select></span></label>
+            <button id="dispatch-send" class="ghost">发到成员信箱</button>
+          </div>
+        </div>
+      </aside>
+
+      <div id="session-pop" class="session-pop" hidden>
+        <div class="session-pop-list-wrap">
+          <div class="session-pop-head">本任务的成员 <span class="muted">点击切到中央 · 拖动松手即拆为独立窗口</span></div>
+          <div id="session-pop-list" class="session-pop-list" role="listbox" aria-label="成员会话"></div>
+        </div>
+        <div id="session-pop-preview" class="session-pop-preview" title="点击把这条会话切换到主会话">
+          <div id="session-pop-hint" class="muted pop-hint">悬停左侧成员，这里预览最新会话</div>
+          <div id="session-pop-transcript" class="transcript mini"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="board-dialog" class="dialog-backdrop" hidden>
+      <div class="dialog wide">
+        <h3>共享板</h3>
+        <div id="board-body" class="board-body"></div>
+        <div class="dialog-actions">
+          <button id="board-close" class="ghost">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="public-board-dialog" class="dialog-backdrop" hidden>
+      <section class="dialog wide public-board-dialog" role="dialog" aria-modal="true" aria-labelledby="public-board-title">
+        <div class="public-board-head">
+          <div>
+            <h3 id="public-board-title">过程看板</h3>
+            <p class="muted public-board-sub">按时间顺序像群聊一样围观全员过程动态，仅作旁观。</p>
+          </div>
+          <label class="setting-toggle-chip" title="默认关闭，仅在需要时手动开启">
+            <input id="public-board-monitor-toggle" type="checkbox" />
+            <span>防卡死巡检</span>
+          </label>
+        </div>
+        <div id="public-board-feed" class="public-board-feed"></div>
+        <div class="dialog-actions">
+          <button id="public-board-refresh" class="ghost" type="button">刷新</button>
+          <button id="public-board-close" class="ghost" type="button">关闭</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="result-inbox-dialog" class="dialog-backdrop" hidden>
+      <section class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="result-inbox-title">
+        <h3 id="result-inbox-title">子任务信箱</h3>
+        <div id="result-inbox-list" class="result-inbox-list"></div>
+        <pre id="result-inbox-body" class="result-inbox-body" hidden></pre>
+        <div class="dialog-actions">
+          <button id="result-inbox-more" class="ghost" type="button" hidden>读取更多</button>
+          <button id="result-inbox-close" class="ghost" type="button">关闭</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="channel-dialog" class="dialog-backdrop" hidden>
+      <form id="channel-form" class="dialog" role="dialog" aria-modal="true" aria-labelledby="channel-dialog-title">
+        <h3 id="channel-dialog-title">新建频道</h3>
+        <label id="channel-name-field">频道名<input id="channel-name" maxlength="60" placeholder="例如：方案复核" /></label>
+        <fieldset id="channel-members" class="channel-members"><legend>选择成员</legend></fieldset>
+        <div id="channel-dialog-error" class="muted" role="status"></div>
+        <div class="dialog-actions">
+          <button id="channel-cancel" class="ghost" type="button">取消</button>
+          <button id="channel-save" class="primary" type="submit">创建频道</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="member-dialog" class="dialog-backdrop" hidden>
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="member-dialog-title">
+        <h3 id="member-dialog-title">添加宿主成员</h3>
+        <label>成员名<input id="member-name" placeholder="例如：开发" /></label>
+        <label>宿主<span class="select-wrap"><select id="member-host"></select></span></label>
+        <label for="member-path">宿主路径</label>
+        <div class="path-input"><input id="member-path" placeholder="自动查找，或指定本机程序" /><button id="member-path-pick" type="button">浏览</button></div>
+        <div class="path-test"><button id="member-probe" type="button">检测连通性</button><span id="member-probe-status" class="muted" role="status"></span></div>
+        <div class="member-model-field">
+          <span>模型与思考</span>
+          <button id="member-model-picker" class="model-trigger" type="button">选择模型</button>
+          <select id="member-model" hidden></select>
+          <select id="member-effort" hidden></select>
+        </div>
+        <div class="dialog-actions">
+          <button id="member-cancel" class="ghost">取消</button>
+          <button id="member-create" class="primary">创建</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="team-dialog" class="dialog-backdrop" hidden>
+      <section class="dialog wide team-dialog" role="dialog" aria-modal="true" aria-labelledby="team-dialog-title">
+        <h3 id="team-dialog-title">组建自定义团队</h3>
+        <p class="muted team-hint">先定主导者，再排成员分工。开跑后主线会留下这份分工记录，主导者按分工派活。</p>
+        <label>团队目标<textarea id="team-goal" rows="3" placeholder="例如：把蜂群的自定义团队入口做完并验收"></textarea></label>
+        <div class="team-block">
+          <div class="team-block-head"><span>主导者</span><span class="muted">负责拆解目标、派活和收口</span></div>
+          <div class="team-row team-leader-row">
+            <label class="team-name">角色<input id="team-leader-name" value="主导者" maxlength="24" /></label>
+            <label class="team-pick">宿主<span class="select-wrap"><select id="team-leader-host"></select></span></label>
+            <label class="team-pick">模型<span class="select-wrap"><select id="team-leader-model"></select></span></label>
+          </div>
+        </div>
+        <div class="team-block">
+          <div class="team-block-head">
+            <span>成员分工 <span id="team-member-count" class="muted"></span></span>
+            <span class="team-block-actions">
+              <button id="team-template-dev" class="ghost" type="button">开发 + 验收</button>
+              <button id="team-add-member" class="ghost" type="button">添加成员</button>
+            </span>
+          </div>
+          <div id="team-member-rows" class="team-member-rows"></div>
+          <p class="muted team-empty" id="team-member-empty">还没有成员。至少加一位，写清他负责什么。</p>
+        </div>
+        <div class="dialog-actions">
+          <button id="team-cancel" class="ghost">取消</button>
+          <button id="team-launch" class="primary">组建并开跑</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="settings-dialog" class="dialog-backdrop" hidden>
+      <section class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <h3 id="settings-title">设置</h3>
+        <div class="settings-subhead">宿主 <button id="settings-add-agent" class="ghost" type="button">添加 Agent</button></div>
+        <div id="host-settings" class="settings-hosts"></div>
+        <div class="settings-subhead">协作与巡检</div>
+        <label class="setting-toggle-row">
+          <input id="setting-stall-monitor" type="checkbox" />
+          <span>
+            <strong>启用防卡死巡检（默认关闭）</strong>
+            <small class="muted">蜂群默认由集团模式自主推进；开启后若存在未完结派工且全员空闲超时，将向主频道发送一次提醒。</small>
+          </span>
+        </label>
+        <div class="dialog-actions"><button id="settings-close" class="ghost">关闭</button></div>
+      </section>
+    </div>
+
+    <div id="model-picker" class="model-picker" popover="auto" role="dialog" aria-label="选择模型与思考档位">
+      <div class="model-picker-main">
+        <div class="model-picker-header">
+          <strong>选择模型</strong>
+        </div>
+        <div id="model-picker-list" class="model-picker-list" role="listbox" aria-label="模型"></div>
+      </div>
+      <aside id="model-picker-info" class="model-picker-info" popover="auto" role="dialog" aria-label="模型参数"></aside>
+    </div>
+    <div id="conv-dialog" class="dialog-backdrop" hidden>
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="conv-dialog-title">
+        <h3 id="conv-dialog-title">重命名会话</h3>
+        <label><span id="conv-field-label">名称</span><input id="conv-input" maxlength="120" /></label>
+        <p id="conv-hint" class="muted" hidden></p>
+        <div class="dialog-actions">
+          <button id="conv-cancel" class="ghost">取消</button>
+          <button id="conv-confirm" class="primary">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="project-dialog" class="dialog-backdrop" hidden>
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="project-dialog-title">
+        <h3 id="project-dialog-title">项目设置</h3>
+        <label>项目名称<input id="project-name-input" maxlength="80" /></label>
+        <label>工作目录</label>
+        <div class="path-input"><input id="project-workspace-input" readonly /><button id="project-open-folder" type="button">打开</button></div>
+        <p class="muted project-dialog-hint">会话可以拖进项目，或右键会话选择「移动到项目」。归档只隐藏项目，不删除任何记录。</p>
+        <div class="dialog-actions project-dialog-actions">
+          <button id="project-delete" class="danger" type="button">删除项目</button>
+          <button id="project-archive" class="ghost" type="button">归档项目</button>
+          <span class="spacer"></span>
+          <button id="project-cancel" class="ghost" type="button">取消</button>
+          <button id="project-save" class="primary" type="button">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="confirm-dialog" class="dialog-backdrop" hidden>
+      <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+        <h3 id="confirm-title">确认操作</h3>
+        <p id="confirm-detail" class="confirm-detail"></p>
+        <div class="dialog-actions">
+          <button id="confirm-cancel" class="ghost" type="button">取消</button>
+          <button id="confirm-ok" class="danger" type="button">确认</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="share-dialog" class="dialog-backdrop" hidden>
+      <section class="dialog wide share-dialog" role="dialog" aria-modal="true" aria-labelledby="share-title">
+        <h3 id="share-title">分享会话</h3>
+        <div class="share-meta">
+          <span id="share-subtitle" class="muted"></span>
+          <label class="share-toggle"><input id="share-paths" type="checkbox" /> 包含本机文件路径</label>
+        </div>
+        <div id="share-preview" class="share-preview"></div>
+        <p class="muted">只包含你的提问和成员的回复；思考过程、工具事件、私信和派工提示不会写进副本。</p>
+        <div class="dialog-actions">
+          <button id="share-close" class="ghost">关闭</button>
+          <button id="share-export" class="ghost">导出 Markdown</button>
+          <button id="share-copy" class="primary">复制</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="mobile-dialog" class="dialog-backdrop" hidden>
+      <section class="dialog mobile-dialog" role="dialog" aria-modal="true" aria-labelledby="mobile-dialog-title">
+        <h3 id="mobile-dialog-title">手机连接与提醒</h3>
+        <div class="mobile-dialog-content">
+          <div class="mobile-status-row">
+            <span class="mobile-status-label">手机访问服务：</span>
+            <span id="mobile-status-text" class="status-pill status-ready">运行中</span>
+            <button id="mobile-toggle-btn" class="ghost mini-btn" type="button">暂停服务</button>
+          </div>
+
+          <div class="mobile-info-grid">
+            <div class="mobile-qr-box">
+              <div id="mobile-qr-container" class="qr-code"></div>
+              <div class="qr-tip">用手机扫码或输入 PIN 码</div>
+            </div>
+            <div class="mobile-details-box">
+              <div class="detail-line">
+                <span class="line-label">局域网地址：</span>
+                <code id="mobile-server-ip" class="copyable-code">等待连接服务启动</code>
+              </div>
+              <div class="detail-line">
+                <span class="line-label">6 位配对码 (PIN)：</span>
+                <span id="mobile-pin-code" class="pin-display">------</span>
+                <button id="mobile-regen-pin-btn" class="ghost icon-button" type="button" title="刷新配对码">↻</button>
+              </div>
+              <div class="detail-line">
+                <span class="line-label">已配对设备：</span>
+                <span id="mobile-paired-count">0 台</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mobile-devices-list-box">
+            <div class="sub-head">已绑定设备列表</div>
+            <ul id="mobile-devices-list" class="mobile-devices-list"></ul>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button id="mobile-dialog-close" class="primary">关闭</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="avatar-picker" class="avatar-picker" role="dialog" aria-label="专属头像库" hidden>
+      <div class="avatar-picker-head">
+        <div>
+          <strong id="avatar-picker-title">专属头像库</strong>
+          <span id="avatar-picker-sub" class="muted"></span>
+        </div>
+        <div class="avatar-picker-actions">
+          <button id="avatar-picker-add" class="ghost mini-btn" type="button">+ 自定义添加</button>
+          <button id="avatar-picker-close" class="ghost icon-button" type="button" aria-label="关闭头像库" title="关闭"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+        </div>
+      </div>
+      <input id="avatar-file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+      <div id="avatar-picker-grid" class="avatar-picker-grid"></div>
+      <div id="avatar-crop-box" class="avatar-crop-box" hidden>
+        <div class="avatar-crop-tip muted">拖动调整头像框位置，滚轮或滑块缩放截取头部</div>
+        <canvas id="avatar-crop-canvas" class="avatar-crop-canvas" width="200" height="200"></canvas>
+        <label class="avatar-crop-zoom">
+          <span>缩放</span>
+          <input id="avatar-crop-scale" type="range" min="1" max="4" step="0.05" value="1" />
+        </label>
+        <div class="avatar-crop-actions">
+          <button id="avatar-crop-cancel" class="ghost mini-btn" type="button">取消</button>
+          <button id="avatar-crop-confirm" class="primary mini-btn" type="button">确定添加</button>
+        </div>
+      </div>
+      <div id="avatar-picker-foot" class="avatar-picker-foot muted">同系列模型跨平台共用此专属库</div>
+    </div>
+
+    <div id="dragback-overlay" class="dragback-overlay" hidden><div class="dragback-label">松手，把会话塞回主窗口</div></div>
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

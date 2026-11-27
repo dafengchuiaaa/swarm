@@ -1,0 +1,12 @@
+{
+  "name": "@swarm/shell",
+  "productName": "蜂群",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Swarm desktop application",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev --config electron.vite.config.ts",
+    "build": "electron-vite build --config electron.vite.config.ts"
+  }
+}

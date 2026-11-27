@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0c0f17" />
+    <title>蜂群移动看板</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <!-- 配对视图（未连接时展示） -->
+    <div id="pair-view" class="view-screen">
+      <div class="pair-card">
+        <div class="logo-row">
+          <svg class="hex-logo" viewBox="0 0 12 13" aria-hidden="true">
+            <path d="M6 0l6 3.25v6.5L6 13 0 9.75v-6.5Z" />
+          </svg>
+          <div class="logo-title">蜂群 Android</div>
+        </div>
+        <p class="pair-desc">在同一 Wi-Fi 下连接电脑端蜂群，实时同步团队状态、接收三类通知与离线语音简报。</p>
+
+        <form id="pair-form" class="pair-form">
+          <div class="field-group">
+            <label for="host-input">电脑局域网 IP</label>
+            <input id="host-input" type="text" placeholder="输入桌面蜂群显示的地址" required />
+          </div>
+
+          <div class="field-row">
+            <div class="field-group flex-1">
+              <label for="port-input">端口</label>
+              <input id="port-input" type="number" value="3818" required />
+            </div>
+            <div class="field-group flex-2">
+              <label for="pin-input">6 位配对码 (PIN)</label>
+              <input id="pin-input" type="text" maxlength="6" placeholder="电脑端显示的PIN" required />
+            </div>
+          </div>
+
+          <div id="pair-error" class="error-msg" hidden></div>
+
+          <button id="pair-btn" type="submit" class="primary-btn">连接蜂群</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 主控看板视图（已连接后展示） -->
+    <div id="dashboard-view" class="view-screen" hidden>
+      <!-- 顶栏 -->
+      <header class="app-header">
+        <div class="header-main">
+          <svg class="hex-logo-sm" viewBox="0 0 12 13" aria-hidden="true">
+            <path d="M6 0l6 3.25v6.5L6 13 0 9.75v-6.5Z" />
+          </svg>
+          <div class="header-title-box" id="proj-selector-btn" style="cursor: pointer;" title="点击切换项目或任务">
+            <div class="proj-title-row">
+              <span id="proj-name" class="proj-title">蜂群工作台</span>
+              <span class="proj-caret">▾</span>
+            </div>
+            <div id="conn-pill" class="conn-pill conn-online">
+              <span class="status-dot"></span>
+              <span id="conn-text">已连接</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <button id="briefing-btn" class="action-btn briefing-btn" type="button" title="听简报" aria-label="听简报">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            </svg>
+            <span id="briefing-label">听简报</span>
+          </button>
+          <button id="settings-btn" class="icon-btn" type="button" title="设置" aria-label="设置">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- 快速统计指示条 -->
+      <nav class="stats-bar">
+        <div class="stat-item stat-waiting"><span id="count-waiting">0</span> 等你处理</div>
+        <div class="stat-item stat-progress"><span id="count-progress">0</span> 进行中</div>
+        <div class="stat-item stat-delivered"><span id="count-delivered">0</span> 已交付</div>
+      </nav>
+
+      <!-- 主要内容区域（按优先级三层排列） -->
+      <main class="content-scroll">
+        <!-- 1. 「等你处理」 -->
+        <section id="sec-waiting" class="dashboard-sec sec-waiting-block" hidden>
+          <div class="sec-header">
+            <span class="sec-badge badge-red">🚨 等你处理</span>
+            <span class="sec-sub">需要回电脑前决策或确认</span>
+          </div>
+          <div id="list-waiting" class="card-list"></div>
+        </section>
+
+        <!-- 2. 「进行中／排队」 -->
+        <section id="sec-progress" class="dashboard-sec">
+          <div class="sec-header">
+            <span class="sec-badge badge-blue">⚡ 进行中 / 排队</span>
+            <span id="progress-summary" class="sec-sub">实时任务与进展</span>
+          </div>
+          <div id="list-progress" class="card-list">
+            <div class="empty-tip">当前暂无进行中或排队的任务</div>
+          </div>
+        </section>
+
+        <!-- 3. 「已交付」 -->
+        <section id="sec-delivered" class="dashboard-sec">
+          <div class="sec-header">
+            <span class="sec-badge badge-green">✅ 已交付成果</span>
+            <span class="sec-sub">点击可查看交付物与结论</span>
+          </div>
+          <div id="list-delivered" class="card-list">
+            <div class="empty-tip">暂无已交付成果</div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- 任务详情抽屉 / 弹层 -->
+    <div id="task-modal" class="modal-overlay" hidden>
+      <div class="modal-drawer">
+        <div class="drawer-drag-handle"></div>
+        <div class="drawer-header">
+          <div class="drawer-title-box">
+            <span id="detail-badge" class="sec-badge"></span>
+            <h3 id="detail-title" class="drawer-title">任务详情</h3>
+          </div>
+          <button id="close-modal-btn" class="icon-btn" aria-label="关闭">✕</button>
+        </div>
+        <div class="drawer-body">
+          <div class="detail-meta-row">
+            <span class="meta-label">成员：</span><span id="detail-member" class="meta-val"></span>
+            <span class="meta-label">时间：</span><span id="detail-time" class="meta-val"></span>
+          </div>
+
+          <div class="detail-block">
+            <div class="block-title">任务说明 / 提问</div>
+            <div id="detail-content" class="block-content"></div>
+          </div>
+
+          <!-- 错误诊断详情区（失败任务时展示） -->
+          <div id="detail-error-block" class="detail-block error-block" hidden>
+            <div class="block-title error-title">⚠️ 原始报错与中断诊断</div>
+            <div id="detail-error-content" class="block-content error-content code-box"></div>
+            <button id="copy-error-btn" class="secondary-btn btn-sm" type="button" style="margin-top: 8px;">复制错误日志</button>
+          </div>
+
+          <!-- 快捷决策回复区（等你处理时展示） -->
+          <div id="detail-reply-block" class="detail-block reply-block" hidden>
+            <div class="block-title">快捷决策 / 回复蜂群</div>
+            <div class="quick-reply-tags">
+              <button class="quick-tag-btn" data-reply="同意，按此方案推进">同意方案</button>
+              <button class="quick-tag-btn" data-reply="继续执行下一阶段">继续执行</button>
+              <button class="quick-tag-btn" data-reply="暂停，等我到电脑前核对">暂缓处理</button>
+            </div>
+            <div class="reply-input-row">
+              <input id="detail-reply-input" type="text" placeholder="输入决策意见或指示..." />
+              <button id="detail-send-reply-btn" class="primary-btn btn-sm" type="button">发送决策</button>
+            </div>
+          </div>
+
+          <div id="detail-artifacts-block" class="detail-block" hidden>
+            <div class="block-title">已登记产物</div>
+            <div id="detail-artifacts-list" class="artifacts-list"></div>
+          </div>
+
+          <div class="drawer-actions">
+            <button id="read-task-btn" class="secondary-btn" type="button">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              </svg>
+              朗读本条
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 产物预览弹层 -->
+    <div id="artifact-modal" class="modal-overlay" hidden>
+      <div class="modal-drawer full-drawer">
+        <div class="drawer-header">
+          <div class="drawer-title-box">
+            <h3 id="art-preview-title" class="drawer-title">产物预览</h3>
+          </div>
+          <button id="close-art-btn" class="icon-btn" aria-label="关闭">✕</button>
+        </div>
+        <div class="drawer-body">
+          <div id="art-preview-body" class="preview-body markdown-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 设置与解绑确认弹层 -->
+    <div id="settings-modal" class="modal-overlay" hidden>
+      <div class="modal-drawer">
+        <div class="drawer-header">
+          <h3 class="drawer-title">连接与设备设置</h3>
+          <button id="close-settings-btn" class="icon-btn" aria-label="关闭">✕</button>
+        </div>
+        <div class="drawer-body">
+          <div class="settings-row">
+            <span>当前连接服务器</span>
+            <code id="settings-server-url" class="code-pill"></code>
+          </div>
+          <div class="settings-row">
+            <span>设备名称</span>
+            <span class="meta-val">iQOO Neo9 Pro</span>
+          </div>
+          <div class="settings-row">
+            <span>锁屏通知与后台保活</span>
+            <span class="badge-green">前台服务已就绪</span>
+          </div>
+          <div class="settings-danger-zone">
+            <button id="unpair-btn" class="danger-btn" type="button">断开并解除配对</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 项目与任务切换弹层 -->
+    <div id="project-modal" class="modal-overlay" hidden>
+      <div class="modal-drawer">
+        <div class="drawer-header">
+          <h3 class="drawer-title">切换项目 / 任务容器</h3>
+          <button id="close-project-btn" class="icon-btn" aria-label="关闭">✕</button>
+        </div>
+        <div class="drawer-body">
+          <p class="pair-desc" style="margin-bottom: 12px;">选择当前手机看板对准的项目或自由对话任务：</p>
+          <div id="project-list" class="project-select-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 全局轻量 Toast 提示 -->
+    <div id="toast-msg" class="toast-box" hidden></div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

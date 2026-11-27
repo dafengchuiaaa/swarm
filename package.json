@@ -1,0 +1,34 @@
+{
+  "name": "swarm-independent",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "bun@1.4.4",
+  "scripts": {
+    "dev": "cd packages/swarm-shell && electron-vite dev --config electron.vite.config.ts",
+    "build": "electron-vite build --config packages/swarm-shell/electron.vite.config.ts",
+    "build:mobile": "cd packages/swarm-mobile && vite build",
+    "apk:build": "cd packages/swarm-mobile/android && java -jar ./gradle/wrapper/gradle-wrapper.jar assembleDebug",
+    "start": "electron packages/swarm-shell",
+    "test": "vitest run tests/unit",
+    "cap:sync": "cd packages/swarm-mobile && bun x cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@modelcontextprotocol/sdk": "1.27.1",
+    "markdown-it": "15.0.3",
+    "qrcode": "^1.5.4",
+    "ws": "^8.23.0",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2",
+    "@types/qrcode": "^1.5.6",
+    "@types/ws": "^8.18.2",
+    "electron": "37.10.3",
+    "electron-vite": "5.0.0",
+    "typescript": "5.9.3",
+    "vite": "6.4.1",
+    "vitest": "4.1.0"
+  }
+}
