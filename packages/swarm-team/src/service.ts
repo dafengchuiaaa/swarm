@@ -184,7 +184,7 @@ export class TeamService {
     return session?.member_label ?? memberId;
   }
 
-  private memberLabels(projectId: string): Map<string, string> {
+  memberLabels(projectId: string): ReadonlyMap<string, string> {
     const labels = new Map(this.deps.sessions(projectId).map(item => [item.id, item.member_label] as const));
     labels.set(OWNER, '我');
     return labels;
@@ -294,11 +294,11 @@ export class TeamService {
     return messages;
   }
 
-  pendingInbox(projectId: string, memberId: string): number {
+  openingInbox(projectId: string, memberId: string, dispatchId?: string): BusMessage[] {
     const bus = this.bus(projectId, memberId);
     return bus.inbox(memberId).filter(message =>
-      !bus.isGroupChannel(message.channel) || message.threadId || message.requiresAction,
-    ).length;
+      message.id !== dispatchId && (!bus.isGroupChannel(message.channel) || message.threadId || message.requiresAction),
+    );
   }
 
   ack(projectId: string, memberId: string, messageIds: string[], cursor?: BusCursor): void {
@@ -339,7 +339,7 @@ export class TeamService {
     return this.bus(projectId, memberId).taskOf(memberId);
   }
 
-  private decode(bus: CollaborationBus, labels: Map<string, string>, message: BusMessage): DecorateMessage {
+  private decode(bus: CollaborationBus, labels: ReadonlyMap<string, string>, message: BusMessage): DecorateMessage {
     const dispatch = message.requiresAction ? bus.dispatchOf(message.id) : undefined;
     return {
       id: message.id,
@@ -442,9 +442,11 @@ export class TeamService {
   }
 
   readMessages(projectId: string, memberId: string, ids: string[], maxChars?: number, offset = 0) {
-    return this.bus(projectId, memberId)
-      .readMessages(memberId, ids, maxChars, offset, this.deps.readRunResult)
-      .map(message => ({ ...message, senderLabel: this.labelOf(projectId, message.sender) }));
+    const messages = this.bus(projectId, memberId)
+      .readMessages(memberId, ids, maxChars, offset, this.deps.readRunResult);
+    if (!messages.length) return [];
+    const labels = this.memberLabels(projectId);
+    return messages.map(message => ({ ...message, senderLabel: labels.get(message.sender) ?? message.sender }));
   }
 
   markDispatch(projectId: string, id: string, patch: Partial<Pick<BusDispatch, 'status' | 'runId' | 'error'>>): BusDispatch | undefined {

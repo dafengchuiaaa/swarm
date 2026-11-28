@@ -30,7 +30,9 @@ interface ActiveRun {
 
 /** 主进程提供给 RunManager 的工具接线：每次 run 一个 token，结束即吊销。 */
 export interface ToolBinding {
-  issue(projectId: string, memberId: string, runId: string): { token: string; url: string; pendingInbox?: number };
+  issue(projectId: string, memberId: string, runId: string, dispatchId?: string): {
+    token: string; url: string; openingInbox: string[];
+  };
   revoke(token: string): void;
   server: { command: string; args: string[] };
 }
@@ -80,6 +82,7 @@ export class RunManager {
     sessionId: string;
     prompt: string;
     runId?: string;
+    dispatchId?: string;
     wakeup?: boolean;
     handoffProbe?: boolean;
     model?: string;
@@ -115,10 +118,10 @@ export class RunManager {
     }
 
     let toolsConfig: HostRunRequest['tools'];
-    let pendingInbox = 0;
+    let openingInbox: string[] = [];
     if (!input.handoffProbe && TOOL_HOSTS.has(session.host) && this.tools) {
-      const issued = this.tools.issue(project.id, this.store.collaborationMemberId(session.id), run.id);
-      pendingInbox = issued.pendingInbox ?? 0;
+      const issued = this.tools.issue(project.id, this.store.collaborationMemberId(session.id), run.id, input.dispatchId);
+      openingInbox = issued.openingInbox;
       active.token = issued.token;
       toolsConfig = {
         command: this.tools.server.command,
@@ -131,11 +134,15 @@ export class RunManager {
       };
     }
 
-    const prompt = toolsConfig
+    const taskPrompt = toolsConfig
       ? input.wakeup
         ? `${input.prompt} swarm_read 取结果，处理后 swarm_ack 并续办。`
-        : withCollaboration(project.name, session, input.prompt, pendingInbox)
+        : withCollaboration(project.name, session, input.prompt)
       : input.prompt;
+    const prompt = openingInbox.length
+      ? [taskPrompt, '', '【开场信箱】', ...openingInbox,
+        '待看消息已附上。处理完成后用 swarm_ack 确认对应消息 ID；运行中需要刷新时用 swarm_inbox。'].join('\n')
+      : taskPrompt;
     const request: HostRunRequest = {
       host: session.host,
       prompt,
@@ -380,10 +387,9 @@ export function describeSession(session: SessionRecord): string {
 }
 
 /** 接上工具的成员，开局就知道自己的身份、可用工具和交付要求；不接工具的宿主原样传任务。 */
-export function withCollaboration(projectName: string, session: SessionRecord, prompt: string, pendingInbox = 0): string {
+export function withCollaboration(projectName: string, session: SessionRecord, prompt: string): string {
   return [
     `【蜂群协作】你是项目「${projectName}」的成员「${session.member_label}」（成员 ID：${session.id}）。`,
-    ...(pendingInbox > 0 ? [`本次开跑时信箱有 ${pendingInbox} 条指名消息或公告栏回复待看。先调用 swarm_inbox，检查是否有人回复了你先前的问题。相关意见纳入当前判断，需要继续讨论时回原帖；已处理的消息用 swarm_ack 确认，暂时未处理的回复留给后续回合。`] : []),
     '你的目标是和团队把任务做好。出现信息缺口、关键判断不确定、连续尝试没有进展，或有适合独立复核、并行的子任务时，主动找最合适的成员。把你已知的情况、需要对方回答的问题和预期结果说清楚，然后继续推进你能独立完成的部分。简单明确的工作直接做。已经有人处理的事避免重复派工。',
     '需要对方实际处理问题时用 swarm_dispatch。已有成员传 to、text。用户指定的宿主或模型还没有成员席时可传 host、model、text。使用蜂群工具启动成员。派工 ID 表示请求已发出，拿到答复后再核对并整合结果。',
     '留言板发新帖用 swarm_say({text})，回复现有留言用 swarm_say({thread: "原留言消息 ID", text})。请另一位成员回复时，用 swarm_dispatch({to, text, thread: "原留言消息 ID"})，请求投递到对方信箱。收件成员先看请求里的留言引用，需要原文时用 swarm_read，再自行决定并发布回复。共享键值 swarm_board_write 用于记录状态或数值。',

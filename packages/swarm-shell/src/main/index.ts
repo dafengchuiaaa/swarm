@@ -1137,7 +1137,7 @@ async function startDispatch(id: string, session: SessionRecord): Promise<void> 
   dispatchQueue.assign(id, runId);
   team.markDispatch(item.projectId, id, { status: 'claimed', runId, error: undefined });
   try {
-    await runner.start({ projectId: item.projectId, sessionId: session.id, prompt, runId, wakeup });
+    await runner.start({ projectId: item.projectId, sessionId: session.id, prompt, runId, dispatchId: id, wakeup });
     if (dispatchQueue.get(id)?.status === 'running') {
       team.markDispatch(item.projectId, id, { status: 'running', runId, error: undefined });
     }
@@ -1373,14 +1373,14 @@ async function boot(): Promise<void> {
     if (channel === 'run:error') onRunFinished({ runId: (payload as { runId: string }).runId, error: (payload as { error: string }).error });
   };
   runner = new RunManager(store, bridge, emit, {
-    issue: (projectId, memberId, runId) => gateway.issue(projectId, memberId, runId),
+    issue: (projectId, memberId, runId, dispatchId) => gateway.issue(projectId, memberId, runId, dispatchId),
     revoke: token => gateway.revoke(token),
     server: { command: process.execPath, args: [mcpServerPath()] },
   }, handoffMember);
   logLine(`MCP 服务脚本：${mcpServerPath()}`);
   registerIpc();
 
-  mobileServer = new MobileGatewayServer(store, team, dispatchQueue, sessionId => Boolean(runner?.runningSession(sessionId)));
+  mobileServer = new MobileGatewayServer(store, team, sessionId => Boolean(runner?.runningSession(sessionId)));
   const mobileStaticDir = path.resolve(__dirname, '../../packages/swarm-mobile/dist');
   if (existsSync(mobileStaticDir)) {
     mobileServer.setStaticAssetsDir(mobileStaticDir);

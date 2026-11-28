@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { SwarmStore } from '../../../packages/swarm-shell/src/main/store';
 import { RunManager } from '../../../packages/swarm-shell/src/main/runner';
-import { HostBridge } from '../../../packages/swarm-hosts/src/hostBridge';
+import { HostBridge, type HostRunRequest } from '../../../packages/swarm-hosts/src/hostBridge';
+import { BusGateway } from '../../../packages/swarm-shell/src/main/busServer';
 import { OWNER, TeamService, type TeamDeps } from '../../../packages/swarm-team/src/service';
 
 const dirs: string[] = [];
@@ -89,6 +90,67 @@ it('运行器登记链接工作区内的产物，并保留缺失文件提示和�
     expect(finished.missing).toEqual([path.join(workspace, '待补.md')]);
     expect(store.events(finished.runId).map(event => event.kind)).toEqual(['reasoning', 'chunk']);
   } finally {
+    store.close();
+  }
+});
+
+it('开场直接带上其它待看消息，原派工不重复注入，收到回执前保持未处理', async () => {
+  const { dir, store } = openStore();
+  const project = store.createProject('团队协作', dir);
+  const member = store.createSession({ projectId: project.id, memberLabel: '开发', host: 'CodeBuddy', model: 'test' });
+  const team = new TeamService({
+    project: id => store.project(id),
+    sessions: id => store.listSessions(id),
+    load: id => store.loadBusState(id) as ReturnType<TeamDeps['load']>,
+    save: (id, snapshot) => store.saveBusState(id, snapshot),
+  });
+  const [dispatchId] = team.post({ projectId: project.id, from: OWNER, to: member.id, text: '主派工' }).messageIds;
+  const [messageId] = team.post({ projectId: project.id, from: OWNER, to: member.id, text: '补充约束' }).messageIds;
+  team.post({ projectId: project.id, from: OWNER, to: 'all', text: '一般公告' });
+  const gateway = new BusGateway(team);
+  const requests: HostRunRequest[] = [];
+  let receiptBeforeAck: string | undefined;
+  let ackResult: unknown;
+  const bridge = new class extends HostBridge {
+    override async run(_id: string, request: HostRunRequest) {
+      requests.push(request);
+      if (requests.length === 1) {
+        receiptBeforeAck = team.bus(project.id).inbox(member.id)
+          .find(message => message.id === messageId)?.receipts[member.id];
+        const response = await fetch(`${request.tools?.env.SWARM_BUS_URL}/tool`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${request.tools?.env.SWARM_BUS_TOKEN}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ name: 'swarm_ack', args: { message_ids: [messageId] } }),
+        });
+        ackResult = await response.json();
+      }
+      return { text: '收到', sessionId: '', model: '', seconds: 0 };
+    }
+  }();
+  try {
+    await gateway.listen();
+    const runner = new RunManager(store, bridge, () => {}, {
+      issue: (...args) => gateway.issue(...args),
+      revoke: token => gateway.revoke(token),
+      server: { command: 'node', args: ['server.mjs'] },
+    });
+    const firstRun = await runner.start({ projectId: project.id, sessionId: member.id, prompt: '主派工', dispatchId });
+    await vi.waitFor(() => expect(runner.isRunning(firstRun.id)).toBe(false));
+    const first = requests[0];
+    expect(first.prompt.match(/主派工/g)).toHaveLength(1);
+    expect(first.prompt).toContain(`[${messageId}]`);
+    expect(first.prompt).toContain('补充约束');
+    expect(first.prompt).not.toContain('一般公告');
+    expect(receiptBeforeAck).toBe('queued');
+    expect(ackResult).toMatchObject({ ok: true });
+    await runner.start({ projectId: project.id, sessionId: member.id, prompt: '主派工', dispatchId });
+    expect(requests[1].prompt).not.toContain('【开场信箱】');
+    expect(requests[1].prompt).not.toContain('swarm_inbox');
+  } finally {
+    (gateway as unknown as { http: { close: () => void } }).http.close();
     store.close();
   }
 });

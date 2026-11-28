@@ -8,7 +8,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { OWNER, type TeamService } from '../../../swarm-team/src/service';
-import type { BusCursor } from '../../../swarm-team/src/collaborationBus';
+import type { BusCursor, BusMessage } from '../../../swarm-team/src/collaborationBus';
 
 interface Identity {
   projectId: string;
@@ -247,15 +247,35 @@ export class BusGateway {
     return `http://127.0.0.1:${this.port}`;
   }
 
-  issue(projectId: string, memberId: string, runId: string): { token: string; url: string; pendingInbox: number } {
-    const pendingInbox = this.team.pendingInbox(projectId, memberId);
+  issue(projectId: string, memberId: string, runId: string, dispatchId?: string): {
+    token: string; url: string; openingInbox: string[];
+  } {
+    const messages = this.team.openingInbox(projectId, memberId, dispatchId);
+    const openingInbox = this.inboxLines(projectId, messages.slice(0, 8), true);
+    if (messages.length > openingInbox.length) {
+      openingInbox.push(`另有 ${messages.length - openingInbox.length} 条待看消息，需要时用 swarm_inbox 读取。`);
+    }
     const token = randomUUID().replace(/-/g, '');
     this.tokens.set(token, { projectId, memberId, runId });
-    return { token, url: this.url, pendingInbox };
+    return { token, url: this.url, openingInbox };
   }
 
   revoke(token: string): void {
     this.tokens.delete(token);
+  }
+
+  private inboxLines(projectId: string, messages: BusMessage[], preview = false): string[] {
+    if (!messages.length) return [];
+    const labels = this.team.memberLabels(projectId);
+    return messages.map(message => {
+      const scope = message.channel.startsWith('dm:') ? '私信' : message.threadId ? '公告栏回复' : '频道';
+      const thread = message.threadId ? `，原帖 ${message.threadId}` : '';
+      const evidence = !preview && message.evidence?.length ? `（证据：${message.evidence.join(' / ')}）` : '';
+      const text = preview && message.text.length > 400
+        ? `${message.text.slice(0, 400)}…（完整内容可用 swarm_read 回读）`
+        : message.text;
+      return `[${message.id}] 来自 ${labels.get(message.sender) ?? message.sender}（${scope}${thread}）：${text}${evidence}`;
+    });
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -481,12 +501,7 @@ export class BusGateway {
       case 'swarm_inbox': {
         const limit = Number(args.limit ?? 8);
         const messages = team.takeInbox(projectId, memberId, Math.max(1, Math.min(16, Number.isFinite(limit) ? limit : 8)));
-        const lines = messages.map(message => {
-          const scope = message.channel.startsWith('dm:') ? '私信' : message.threadId ? '公告栏回复' : '频道';
-          const thread = message.threadId ? `，原帖 ${message.threadId}` : '';
-          const evidence = message.evidence?.length ? `（证据：${message.evidence.join(' / ')}）` : '';
-          return `[${message.id}] 来自 ${team.labelOf(projectId, message.sender)}（${scope}${thread}）：${message.text}${evidence}`;
-        });
+        const lines = this.inboxLines(projectId, messages);
         return { text: lines.length ? lines.join('\n') : '信箱为空。', data: { messages } };
       }
       case 'swarm_ack': {

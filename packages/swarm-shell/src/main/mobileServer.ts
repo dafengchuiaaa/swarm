@@ -18,7 +18,6 @@ import { WebSocketServer, WebSocket } from 'ws';
 import QRCode from 'qrcode';
 import type { SwarmStore } from './store';
 import { TeamService, OWNER } from '../../../swarm-team/src/service';
-import type { DispatchQueue } from '../../../swarm-team/src/dispatchQueue';
 
 export interface MobileClientSession {
   token: string;
@@ -190,7 +189,6 @@ export class MobileGatewayServer {
   constructor(
     private readonly store: SwarmStore,
     private readonly team: TeamService,
-    private readonly dispatchQueue?: DispatchQueue,
     private readonly isSessionRunning?: (sessionId: string) => boolean,
   ) {
     this.regeneratePin();

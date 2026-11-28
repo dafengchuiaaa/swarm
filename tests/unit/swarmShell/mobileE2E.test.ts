@@ -2,7 +2,6 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { MobileGatewayServer } from '../../../packages/swarm-shell/src/main/mobileServer';
 import { SwarmStore } from '../../../packages/swarm-shell/src/main/store';
 import { TeamService, OWNER } from '../../../packages/swarm-team/src/service';
-import { DispatchQueue } from '../../../packages/swarm-team/src/dispatchQueue';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -13,7 +12,6 @@ describe('Mobile App End-to-End Workflow', () => {
   let dbPath: string;
   let store: SwarmStore;
   let team: TeamService;
-  let dispatchQueue: DispatchQueue;
   let server: MobileGatewayServer;
   let projectId: string;
   let sessionA: any;
@@ -47,8 +45,7 @@ describe('Mobile App End-to-End Workflow', () => {
     });
     team.refreshMembers(projectId);
 
-    dispatchQueue = new DispatchQueue();
-    server = new MobileGatewayServer(store, team, dispatchQueue);
+    server = new MobileGatewayServer(store, team);
   });
 
   afterEach(async () => {
