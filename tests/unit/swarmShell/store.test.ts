@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { SwarmStore } from '../../../packages/swarm-shell/src/main/store';
@@ -59,17 +59,22 @@ it('从 SQLite 恢复已有 256 条消息的项目后，仍能回复旧帖并再
   }
 });
 
-it('运行器按工作区解析标记过的相对产物路径并保留思考事件', async () => {
+it('运行器登记链接工作区内的产物，并保留缺失文件提示和思考事件', async () => {
   const { dir, store } = openStore();
   try {
-    const project = store.createProject('成果验收', dir);
+    const realWorkspace = path.join(realpathSync.native(dir), 'workspace');
+    const workspace = path.join(dir, 'alias');
+    mkdirSync(realWorkspace);
+    symlinkSync(realWorkspace, workspace, process.platform === 'win32' ? 'junction' : 'dir');
+    const project = store.createProject('成果验收', workspace);
     const session = store.createSession({ projectId: project.id, memberLabel: '开发', host: 'CodeBuddy', model: 'hy3' });
-    const report = path.join(dir, '验收 记录.md');
+    const report = path.join(realWorkspace, '验收 记录.md');
     writeFileSync(report, '验收完成');
+    const reportedPath = process.platform === 'win32' ? report : './验收 记录.md';
     const bridge = new class extends HostBridge {
       override async run(runId: string) {
         this.emit('event', { runId, kind: 'reasoning', payload: '准备核对成果' });
-        this.emit('event', { runId, kind: 'chunk', payload: '交付 `./验收 记录.md`，待补 `./待补.md`。' });
+        this.emit('event', { runId, kind: 'chunk', payload: `交付 "${reportedPath}"，待补 \`./待补.md\`。` });
         return { text: '', sessionId: '', model: '', seconds: 0 };
       }
     }();
@@ -81,7 +86,7 @@ it('运行器按工作区解析标记过的相对产物路径并保留思考事�
       void runner.start({ projectId: project.id, sessionId: session.id, prompt: '登记验收文件' }).catch(reject);
     });
     expect(store.listArtifacts(session.id)).toMatchObject([{ path: realpathSync.native(report), verified: 1 }]);
-    expect(finished.missing).toEqual([path.join(dir, '待补.md')]);
+    expect(finished.missing).toEqual([path.join(workspace, '待补.md')]);
     expect(store.events(finished.runId).map(event => event.kind)).toEqual(['reasoning', 'chunk']);
   } finally {
     store.close();

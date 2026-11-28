@@ -340,7 +340,7 @@ export class RunManager {
     const created: ArtifactRecord[] = [];
     for (const candidate of candidates) {
       if (created.length >= 20) break;
-      if (!insideWorkspace(candidate, active.workspace)) continue;
+      if (!insideWorkspace(candidate, active.workspace) && !insideWorkspace(candidate, workspace)) continue;
       try {
         const realPath = realpathSync.native(candidate);
         if (!insideWorkspace(realPath, workspace) || existing.has(realPath.toLowerCase())) continue;

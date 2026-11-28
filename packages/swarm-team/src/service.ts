@@ -106,8 +106,11 @@ export class TeamService {
       runId: saved?.runId,
       channelId: saved?.channelId ?? defaultChannel(key),
     });
+    if (!saved) this.unsavedBuses.add(bus);
     for (const session of sessions) {
-      if (!bus.taskOf(session.id)) bus.addMember({ id: session.id, label: session.member_label });
+      if (bus.taskOf(session.id)) continue;
+      bus.addMember({ id: session.id, label: session.member_label });
+      this.unsavedBuses.add(bus);
     }
     this.cache.set(key, bus);
     this.busKeys.set(bus, key);

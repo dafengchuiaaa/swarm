@@ -43,6 +43,25 @@ it('引用公开留言的派工只进信箱，新成员可自行回到原帖回�
   expect(team.artifacts('p1')[0].name).toBe('验收记录');
 });
 
+it('恢复账本时补绑的成员会在第一次取空信箱后保存', () => {
+  const sessions: TeamSession[] = [];
+  let saved: ReturnType<TeamDeps['load']>;
+  const deps: TeamDeps = {
+    project: id => ({ id, name: '验收', workspace: 'D:/work/repo' }),
+    sessions: () => sessions,
+    load: () => structuredClone(saved),
+    save: (_project, snapshot) => { saved = snapshot; },
+  };
+  new TeamService(deps).post({ projectId: 'p1', from: OWNER, text: '初始消息' });
+  sessions.push({ id: 'dev', member_label: '开发', host: 'CodeBuddy', model: 'hy3', host_session_id: null });
+
+  const team = new TeamService(deps);
+  expect(team.takeInbox('p1', 'dev')).toEqual([]);
+  const taskId = team.bus('p1', 'dev').taskOf('dev')?.id;
+  expect(taskId).toBeDefined();
+  expect(new TeamService(deps).bus('p1', 'dev').taskOf('dev')?.id).toBe(taskId);
+});
+
 it('空信箱和重复回执跳过保存，先前保存失败时仍重试写入', () => {
   let saves = 0;
   let failSave = false;
