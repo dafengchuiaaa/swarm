@@ -14,7 +14,7 @@ import type {
 } from '../shared/types';
 import { createModelPicker } from './modelPicker';
 import { createDraftStore, safeStorage } from './draftStore';
-import { mergeQuotas, resolveQuotaTile, type AccountQuota } from './quotaView';
+import { createQuotaPanel } from './quotaPanel';
 import {
   canDetachInspector,
   findOccupiedByKey,
@@ -603,18 +603,10 @@ function scheduleHomeDraft(): void {
   }, 300);
 }
 
-const QUOTA_HOSTS = [
-  ['CodeBuddy', 'CB / WB', 'CodeBuddy / WorkBuddy'],
-  ['GPT / Codex', 'Codex', 'Codex'],
-  ['Antigravity', 'AG', 'Antigravity'],
-  ['Qoder', 'Qoder', 'Qoder'],
-  ['DeepSeek Harness', 'DSH', 'DeepSeek Harness'],
-  ['ZCode', 'ZCode', 'ZCode'],
-] as const;
-let quotas: Record<string, AccountQuota> = {};
-let lastGoodQuotas: Record<string, AccountQuota> = {};
-let quotaError = false;
-let quotaBusy = false;
+const quotaPanel = createQuotaPanel(
+  $('.quota-rail'), $('#quota-list'), $('#side-foot'), $<HTMLButtonElement>('#quota-refresh'),
+  () => state.catalog, () => api.quotas(),
+);
 const nativeModelCatalogs: Partial<Record<string, HostModelCatalog>> = {};
 
 function updateNativeModels(host: string, catalog: HostModelCatalog): void {
@@ -637,65 +629,11 @@ function updateNativeModels(host: string, catalog: HostModelCatalog): void {
   }
 }
 
-async function refreshCodeBuddyModels(): Promise<void> {
-  if (!state.catalog?.hosts.some(host => host.name === 'CodeBuddy' && host.ready)) return;
+async function refreshNativeModels(): Promise<void> {
+  const host = state.catalog?.hosts.find(item => item.ready && item.nativeModelCatalog);
+  if (!host) return;
   const catalog = await api.codeBuddyModels().catch(() => null);
-  if (catalog) updateNativeModels('CodeBuddy', catalog);
-}
-
-function renderQuotas(): void {
-  const list = $('#quota-list');
-  list.replaceChildren();
-  for (const [host, short, name] of QUOTA_HOSTS) {
-    if (!state.catalog?.hosts.some(item => item.name === host && item.ready)) continue;
-    // 临时失败保留上次成功数值；从未成功过则显示读取状态，不再整行消失。
-    const tileData = resolveQuotaTile(quotas[host], lastGoodQuotas[host], quotaBusy);
-    const { data, value, percent, windows, stale, pending } = tileData;
-    const meter = el('span', 'quota-meter');
-    if (percent === null) meter.classList.add('balance');
-    else {
-      meter.classList.toggle('low', percent <= 20);
-      meter.style.setProperty('--fill', `${Math.min(100, Math.max(0, percent))}%`);
-    }
-    const tile = el('div', 'quota-tile');
-    if (stale) tile.classList.add('stale');
-    if (pending) tile.classList.add('pending');
-    tile.tabIndex = 0;
-    tile.append(meter, el('span', '', short), el('strong', '', value));
-    tile.title = [name,
-      stale ? '本次读取失败，显示上次成功数值' : '',
-      pending ? (data.note || '尚未读到额度数值') : '',
-      data?.plan, ...windows.map(item => `${item.label} ${Math.round(item.remaining_percent!)}%${item.resets_at ? ` · ${new Date(item.resets_at * 1000).toLocaleString()} 重置` : ''}`),
-      ...(data.balances ?? []), stale ? '' : data.note,
-      data?.updated ? `更新于 ${new Date(data.updated * 1000).toLocaleString()}` : '', data?.source].filter(Boolean).join('\n');
-    tile.setAttribute('aria-label', tile.title);
-    list.append(tile);
-  }
-  const status = $('#side-foot');
-  status.hidden = !quotaError;
-  status.textContent = '额度暂时无法更新';
-}
-
-async function refreshQuotas(): Promise<void> {
-  if (quotaBusy) return;
-  quotaBusy = true;
-  $<HTMLButtonElement>('#quota-refresh').disabled = true;
-  renderQuotas();
-  await Promise.allSettled([
-    api.quotas().then((accounts: Record<string, AccountQuota>) => {
-      // 按宿主合并：部分回包 / 单宿主 error 不清掉其他宿主的旧值。
-      const merged = mergeQuotas(quotas, accounts, lastGoodQuotas);
-      quotas = merged.quotas;
-      lastGoodQuotas = merged.lastGood;
-      quotaError = false;
-    }).catch(() => {
-      // 整体失败保留全部旧值，仅标注全局失败状态。
-      quotaError = true;
-    }).finally(renderQuotas),
-  ]);
-  quotaBusy = false;
-  $<HTMLButtonElement>('#quota-refresh').disabled = false;
-  renderQuotas();
+  if (catalog) updateNativeModels(host.name, catalog);
 }
 
 function toast(message: string): void {
@@ -2981,8 +2919,6 @@ function bindSessionDragBack(): void {
 
 async function boot(): Promise<void> {
   state.catalog = await api.catalog();
-  void refreshQuotas();
-  window.setInterval(() => void refreshQuotas(), 5 * 60_000);
   if (state.catalog?.error) toast(`宿主目录读取失败：${state.catalog.error}`);
   state.projects = await api.listProjects();
   renderProjects();
@@ -3017,7 +2953,7 @@ async function boot(): Promise<void> {
     await bindSessionWindow();
     $('#session-reattach').hidden = false;
     bindSessionDragBack();
-    void refreshCodeBuddyModels();
+    void refreshNativeModels();
     return;
   }
   if (INSPECTOR_WINDOW) {
@@ -3028,6 +2964,7 @@ async function boot(): Promise<void> {
     api.inspectorReady(INSPECTOR_WINDOW_ID);
     return;
   }
+  quotaPanel.start();
   // 自由对话容器常驻：没有就让主进程建一个空盒子，侧栏永远有地方放未归属会话。
   if (!state.projects.some(project => project.kind === 'inbox')) {
     await api.defaultProject();
@@ -3044,7 +2981,7 @@ async function boot(): Promise<void> {
     renderProjects();
   }
   showHome();
-  void refreshCodeBuddyModels();
+  void refreshNativeModels();
 }
 
 function showHome(): void {
@@ -3933,7 +3870,6 @@ function bindControls(): void {
   $('#settings-dialog').addEventListener('keydown', event => {
     if (event.key === 'Escape') $('#settings-close').click();
   });
-  $('#quota-refresh').addEventListener('click', () => void refreshQuotas());
   $('#pick-workspace').addEventListener('click', async () => {
     const workspace = await api.pickWorkspace();
     if (!workspace) return;
@@ -4424,11 +4360,11 @@ function renderHostSettings(): void {
         state.catalog = await api.setHostEnabled(host.name, toggle.checked);
         renderHostSettings();
         renderHomeControls();
-        if (host.name === 'CodeBuddy' && toggle.checked) void refreshCodeBuddyModels();
+        if (host.nativeModelCatalog && toggle.checked) void refreshNativeModels();
         updateComposer();
-        renderQuotas();
+        quotaPanel.render();
         if (state.threadRootId) void openThread(state.threadRootId);
-        void refreshQuotas();
+        void quotaPanel.refresh();
       } catch (error) {
         toggle.checked = host.enabled;
         toast((error as Error).message);
@@ -4669,8 +4605,8 @@ async function createMember(): Promise<void> {
     if (topic) await loadView();
     else await openRuns(session.id, null);
     if (candidate !== previous) {
-      if (host === 'CodeBuddy') void refreshCodeBuddyModels();
-      else void refreshQuotas();
+      if (state.catalog?.hosts.some(item => item.name === host && item.nativeModelCatalog)) void refreshNativeModels();
+      else void quotaPanel.refresh();
     }
     toast(`已添加成员：${memberLabel}`);
   } catch (error) {

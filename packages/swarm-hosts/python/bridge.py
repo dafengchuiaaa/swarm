@@ -125,10 +125,17 @@ def _run(request_id: str, args: dict) -> None:
         _RUNS.pop(request_id, None)
 
 
+def _quota_source() -> Path | None:
+    folder = os.environ.get('SWARM_QUOTA_SOURCE')
+    source = Path(folder) if folder else None
+    return source if source and (source / 'quota_monitor.py').is_file() else None
+
+
 def _catalog() -> dict:
 
     folder = ROOT / 'data'
     catalogue: dict[str, object] = {'hosts': [], 'models': {}, 'thoughtLevels': {}, 'modelDetails': {}}
+    catalogue['quotaAvailable'] = _quota_source() is not None
     for entry in adapters.inventory():
         catalogue['hosts'].append({
             'name': entry.get('name'),
@@ -139,6 +146,7 @@ def _catalog() -> dict:
             'note': entry.get('note'),
             'enabled': bool(entry.get('enabled')),
             'customPath': entry.get('customPath'),
+            'nativeModelCatalog': entry.get('name') == 'CodeBuddy',
         })
     for name, filename in (('CodeBuddy', 'model-catalog.json'), ('Antigravity', 'antigravity-models.json')):
         path = folder / filename
@@ -183,11 +191,10 @@ def _catalog() -> dict:
 def _read_quotas(request_id: str) -> None:
     # Keep the original readers in their owning workspace and use a separate interpreter
     # so their adapter imports do not resolve to this bridge's copies.
-    folder = os.environ.get('SWARM_QUOTA_SOURCE')
-    if not folder:
+    source = _quota_source()
+    if source is None:
         _send({'id': request_id, 'kind': 'result', 'accounts': {}})
         return
-    source = Path(folder)
     script = '''
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
@@ -213,8 +220,6 @@ with ThreadPoolExecutor(max_workers=5) as pool:
         print(json.dumps({host: data}, ensure_ascii=False, allow_nan=False), flush=True)
 '''
     try:
-        if not (source / 'quota_monitor.py').is_file():
-            raise FileNotFoundError
         try:
             ready = [entry['name'] for entry in adapters.inventory() if entry['ready']]
             result = subprocess.run([sys.executable, '-c', script, json.dumps(ready)], cwd=source, timeout=32,

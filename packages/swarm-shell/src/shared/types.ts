@@ -7,6 +7,7 @@ export interface CatalogHost {
   note: string;
   enabled: boolean;
   customPath?: string | null;
+  nativeModelCatalog?: boolean;
 }
 
 export interface HostCatalog {
@@ -15,6 +16,7 @@ export interface HostCatalog {
   thoughtLevels: Record<string, Record<string, string[]>>;
   modelDetails?: Record<string, Record<string, ModelDetails>>;
   antigravityCli?: string | null;
+  quotaAvailable?: boolean;
 }
 
 export interface ModelDetails {
