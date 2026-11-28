@@ -10,6 +10,8 @@ import { randomUUID } from 'node:crypto';
 import { OWNER, type TeamService } from '../../../swarm-team/src/service';
 import type { BusCursor, BusMessage } from '../../../swarm-team/src/collaborationBus';
 
+const OPENING_INBOX_LIMIT = 8;
+
 interface Identity {
   projectId: string;
   memberId: string;
@@ -251,9 +253,10 @@ export class BusGateway {
     token: string; url: string; openingInbox: string[];
   } {
     const messages = this.team.openingInbox(projectId, memberId, dispatchId);
-    const openingInbox = this.inboxLines(projectId, messages.slice(0, 8), true);
-    if (messages.length > openingInbox.length) {
-      openingInbox.push(`另有 ${messages.length - openingInbox.length} 条待看消息，需要时用 swarm_inbox 读取。`);
+    const openingInbox = this.inboxLines(projectId, messages.slice(0, OPENING_INBOX_LIMIT), true);
+    const remaining = messages.length - OPENING_INBOX_LIMIT;
+    if (remaining > 0) {
+      openingInbox.push(`另有 ${remaining} 条待看消息，需要时用 swarm_inbox 读取。`);
     }
     const token = randomUUID().replace(/-/g, '');
     this.tokens.set(token, { projectId, memberId, runId });

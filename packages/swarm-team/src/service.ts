@@ -465,7 +465,7 @@ export class TeamService {
     for (const bus of this.projectBuses(projectId)) {
       const result = bus.finishDispatch(id, outcome);
       if (!result) continue;
-      this.persist(bus);
+      if (result.changed || this.unsavedBuses.has(bus)) this.persist(bus);
       return result;
     }
   }

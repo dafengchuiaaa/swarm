@@ -51,6 +51,9 @@ it('通过一次工具调用保存两类回执，写入失败后可重试原回�
     const nextContext = await call('swarm_context');
     expect(nextContext.data?.context_receipt).toEqual(expect.any(String));
     const attemptsBeforeAck = saveAttempts;
+    expect(await call('swarm_ack', { context_receipt: '过期回执', message_ids: [nextId] }))
+      .toMatchObject({ ok: false, error: '上下文回执已失效，请重新读取增量' });
+    expect(saveAttempts).toBe(attemptsBeforeAck);
     expect(await call('swarm_ack', {
       context_receipt: nextContext.data?.context_receipt, message_ids: [nextId],
     })).toMatchObject({ ok: true });
@@ -58,4 +61,20 @@ it('通过一次工具调用保存两类回执，写入失败后可重试原回�
   } finally {
     (gateway as unknown as { http: { close: () => void } }).http.close();
   }
+});
+
+it('开场信箱只附前 8 条，提示可回读其余消息', () => {
+  const team = new TeamService({
+    project: id => ({ id, name: '验收', workspace: process.cwd() }),
+    sessions: () => [{ id: 'dev', member_label: '开发', host: 'CodeBuddy', model: 'test', host_session_id: null }],
+    load: () => undefined,
+    save: () => {},
+  });
+  const ids = Array.from({ length: 10 }, (_, index) => team.post({
+    projectId: 'p', from: OWNER, to: 'dev', text: `补充 ${index + 1}`,
+  }).messageIds[0]);
+  const { openingInbox } = new BusGateway(team).issue('p', 'dev', 'R-1');
+  expect(openingInbox.slice(0, -1).map(line => line.match(/^\[([^\]]+)\]/)?.[1])).toEqual(ids.slice(0, 8));
+  expect(openingInbox.at(-1)).toContain('另有 2 条');
+  expect(openingInbox.at(-1)).toContain('swarm_inbox');
 });

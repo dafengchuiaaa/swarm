@@ -784,16 +784,16 @@ export class CollaborationBus {
   finishDispatch(
     id: string,
     outcome: { status: 'done' | 'failed'; runId?: string; error?: string },
-  ): { status: 'done' | 'failed'; wakeup?: { memberId: string; messageId: string; text: string } } | undefined {
+  ): { status: 'done' | 'failed'; changed: boolean; wakeup?: { memberId: string; messageId: string; text: string } } | undefined {
     const dispatch = this.state.dispatches.find(item => item.id === id);
     if (!dispatch) return undefined;
-    if (dispatch.status === 'done' || dispatch.status === 'failed') return { status: dispatch.status };
-    const { status } = outcome;
+    if (dispatch.status === 'done' || dispatch.status === 'failed') return { status: dispatch.status, changed: false };
+    const completed = { status: outcome.status, changed: true };
     Object.assign(dispatch, outcome, { updated: now() });
-    if (dispatch.reason !== 'task_message') return { status };
+    if (dispatch.reason !== 'task_message') return completed;
     const request = dispatch.messageId ? this.messagesById.get(dispatch.messageId) : undefined;
     const sender = request?.sender;
-    if (!sender || sender === 'owner' || !this.members.some(member => member.id === sender)) return { status };
+    if (!sender || sender === 'owner' || !this.members.some(member => member.id === sender)) return completed;
     const messageId = `W-${id}`;
     const text = `子任务 ${id} ${outcome.status === 'done' ? '完成' : '失败'}。`;
     this.publish({
@@ -802,7 +802,7 @@ export class CollaborationBus {
     });
     this.state.dispatches.push({ id: messageId, messageId, owner: sender, status: 'queued',
       taskId: this.taskOf(sender)?.id ?? '', reason: 'dispatch_result', updated: now() });
-    return { status, wakeup: { memberId: sender, messageId, text } };
+    return { ...completed, wakeup: { memberId: sender, messageId, text } };
   }
 
   wakeupNeeded(id: string): boolean {

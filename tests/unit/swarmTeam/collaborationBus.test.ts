@@ -90,6 +90,29 @@ it('空信箱和重复回执跳过保存，先前保存失败时仍重试写入'
   expect(saves).toBe(initialSaves + 2);
 });
 
+it('重复结束派工不保存，前次写入失败时补写终态', () => {
+  let saveCalls = 0;
+  let failSave = false;
+  const team = new TeamService({
+    project: id => ({ id, name: '验收', workspace: 'D:/work/repo' }),
+    sessions: () => [{ id: 'dev', member_label: '开发', host: 'CodeBuddy', model: 'test', host_session_id: null }],
+    load: () => undefined,
+    save: () => {
+      if (failSave) throw new Error('保存失败');
+      saveCalls += 1;
+    },
+  });
+  const [id] = team.post({ projectId: 'p1', from: OWNER, to: 'dev', text: '请检查' }).messageIds;
+  const before = saveCalls;
+  failSave = true;
+  expect(() => team.finishDispatch('p1', id, { status: 'done' })).toThrow('保存失败');
+  failSave = false;
+  expect(team.finishDispatch('p1', id, { status: 'done' })).toEqual({ status: 'done', changed: false });
+  expect(saveCalls).toBe(before + 1);
+  expect(team.finishDispatch('p1', id, { status: 'failed' })).toEqual({ status: 'done', changed: false });
+  expect(saveCalls).toBe(before + 1);
+});
+
 describe('swarm-team 的协作总线', () => {
   it('子任务回传只唤醒发起会话一次，忙时顺序保留，重启后按 ID 读取结果', () => {
     const team = bus();
@@ -100,7 +123,7 @@ describe('swarm-team 的协作总线', () => {
     expect(result?.status).toBe('done');
     const wake = result!.wakeup!;
     expect(wake.memberId).toBe('lead');
-    expect(team.finishDispatch(child, { status: 'failed', error: '重复收尾' })).toEqual({ status: 'done' });
+    expect(team.finishDispatch(child, { status: 'failed', error: '重复收尾' })).toEqual({ status: 'done', changed: false });
     const restored = new CollaborationBus(members, {
       workspace: 'D:/work/repo', channelId: team.channelId, runId: team.runId, state: team.snapshot(),
     });
@@ -126,7 +149,7 @@ describe('swarm-team 的协作总线', () => {
     restored.ack('lead', [wake.messageId]);
     expect(restored.wakeupNeeded(wake.messageId)).toBe(false);
     expect(restored.resultInbox('lead')).toMatchObject([{ id: wake.messageId, processed: true }]);
-    expect(restored.finishDispatch(wake.messageId, { status: 'done', runId: 'R-parent' })).toEqual({ status: 'done' });
+    expect(restored.finishDispatch(wake.messageId, { status: 'done', runId: 'R-parent' })).toEqual({ status: 'done', changed: true });
     expect(restored.recoverableDispatches()).toEqual([]);
   });
 
