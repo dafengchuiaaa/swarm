@@ -27,6 +27,7 @@ import shutil
 
 
 import subprocess
+import sys
 
 
 
@@ -1065,6 +1066,25 @@ def dsh_command(profile='headless', executable=None):
 
 
 
+def swarm_mcp_servers(tools):
+    if not tools:
+        return {}
+    servers = {'swarm': tools}
+    if bridge := os.environ.get('SWARM_MEMORY_BRIDGE'):
+        script = Path(bridge).expanduser()
+        if not script.is_absolute() or not script.is_file():
+            raise TransportError('SWARM_MEMORY_BRIDGE 必须指向本机的 swarm_memory_bridge.py')
+        servers['swarm_memory'] = {
+            'command': sys.executable,
+            'args': [str(script), 'serve'],
+            'env': {name: os.environ[name] for name in (
+                'SWARM_MEMORY_DIR', 'SWARM_MEMORY_DB', 'SWARM_MEMORY_PORT',
+                'SWARM_MEMORY_ENDPOINT', 'SWARM_PROJECT_REGISTRY', 'SWARM_CODEBUDDY_PROJECTS',
+            ) if name in os.environ},
+        }
+    return servers
+
+
 def run_workbuddy(prompt, session_id, model, emit, cancel, timeout=120, *, _standalone=False, effort='',
 
 
@@ -1209,7 +1229,7 @@ def run_workbuddy(prompt, session_id, model, emit, cancel, timeout=120, *, _stan
         if tools:
             import tempfile as _swarm_tmp
             _swarm_mcp = Path(_swarm_tmp.gettempdir()) / ('swarm-mcp-' + uuid.uuid4().hex + '.json')
-            _swarm_mcp.write_text(json.dumps({'mcpServers': {'swarm': tools}}, ensure_ascii=False), encoding='utf-8')
+            _swarm_mcp.write_text(json.dumps({'mcpServers': swarm_mcp_servers(tools)}, ensure_ascii=False), encoding='utf-8')
             command += ['--mcp-config', str(_swarm_mcp), '--strict-mcp-config']
 
 
@@ -1856,9 +1876,14 @@ def run_acp(command, env, label, mode, prompt, session_id, model, effort, emit, 
 
 
 
-        params = {'cwd': str(workspace or ROOT / 'workspace'), 'mcpServers': [{'name': 'swarm', 'command': tools['command'],
-                        'args': list(tools.get('args') or []),
-                        'env': [{'name': key, 'value': str(value)} for key, value in (tools.get('env') or {}).items()]}] if tools else []}
+        params = {
+            'cwd': str(workspace or ROOT / 'workspace'),
+            'mcpServers': [
+                {'name': name, 'command': server['command'], 'args': list(server.get('args') or []),
+                 'env': [{'name': key, 'value': str(value)} for key, value in (server.get('env') or {}).items()]}
+                for name, server in swarm_mcp_servers(tools).items()
+            ],
+        }
 
 
 

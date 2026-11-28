@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import {
+  AVATAR_CATALOG,
   getSeriesLibraryEntries,
   resolveModelSeries,
   resolveSeriesAvatar,
@@ -7,6 +10,13 @@ import {
 } from '../../../packages/swarm-shell/src/shared/avatarCatalog';
 
 describe('按模型系列划分的专属头像库', () => {
+  it('公开目录中的每款头像都随源码提供', () => {
+    const dir = path.resolve(__dirname, '../../../packages/swarm-shell/src/renderer/avatars');
+    expect(AVATAR_CATALOG).toHaveLength(67);
+    for (const { id } of AVATAR_CATALOG) {
+      expect(existsSync(path.join(dir, `${id}.webp`)), id).toBe(true);
+    }
+  });
   it('不同平台的同系列模型归入同一个系列并共用专属头像库', () => {
     const cbClaude = resolveModelSeries({ targetKey: 'S-1', host: 'CodeBuddy', model: 'claude-sonnet-4-5' });
     const agClaude = resolveModelSeries({ targetKey: 'S-2', host: 'Antigravity', model: 'claude-opus-4-6' });
@@ -20,14 +30,13 @@ describe('按模型系列划分的专属头像库', () => {
     expect(zcodeGlm.id).toBe('glm');
     expect(cbGlm.id).toBe('glm');
 
-    // 选择 claude-eng 后，不同平台上的 Claude 会话全部同步生效
     const selected = { claude: 'unavailable-previous-avatar' };
     expect(
       resolveSeriesAvatar({ targetKey: 'S-1', host: 'CodeBuddy', model: 'claude-sonnet-4-5' }, selected).active.id,
-    ).toBe('builtin-neutral');
+    ).toBe('claude-library');
     expect(
       resolveSeriesAvatar({ targetKey: 'S-2', host: 'Antigravity', model: 'claude-opus-4-6' }, selected).active.id,
-    ).toBe('builtin-neutral');
+    ).toBe('claude-library');
   });
 
   it('支持各系列及「我的头像」自定义添加，并只出现在所属系列库中', () => {

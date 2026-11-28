@@ -13,6 +13,12 @@ const SELECTED_STORAGE_KEY = 'swarm.avatars.selected.v2';
 const CUSTOM_STORAGE_KEY = 'swarm.avatars.custom.v2';
 const HIDDEN_STORAGE_KEY = 'swarm.avatars.hidden.v2';
 
+const avatarFiles = import.meta.glob('./avatars/*.webp', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>;
+
 // 用户「我」初始矢量头像：暖蜜色蜂群指挥官徽像，可在「我的头像」库内直接自定义添加替换。
 const OWNER_DEFAULT_SVG =
   'data:image/svg+xml;utf8,' +
@@ -108,8 +114,7 @@ function writeHiddenIds(ids: string[]): void {
 
 export function entryAvatarUrl(entry: Pick<SeriesLibraryEntry, 'id' | 'dataUrl'>): string {
   if (entry.dataUrl) return entry.dataUrl;
-  if (entry.id === 'owner') return OWNER_DEFAULT_SVG;
-  return OWNER_DEFAULT_SVG;
+  return avatarFiles[`./avatars/${entry.id}.webp`] ?? OWNER_DEFAULT_SVG;
 }
 
 export function resolveMemberAvatar(input: AvatarResolveInput): {

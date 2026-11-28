@@ -24,8 +24,8 @@ dist-apk/
 local.properties
 packages/swarm-hosts/python/data/antigravity-cli.txt
 packages/swarm-hosts/python/data/preferences.json
-packages/swarm-shell/src/renderer/avatars/
-packages/swarm-shell/src/renderer/brand-icons/
+packages/swarm-memory/data/
+packages/swarm-memory/assets/models/
 交付/
 scratch/
 
