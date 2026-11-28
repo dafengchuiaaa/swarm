@@ -35,6 +35,8 @@ bun run apk:build
 
 调试 APK 由 Gradle 在 `packages/swarm-mobile/android/app/build/outputs/apk/debug` 生成。正式安装包需要独立的签名、第三方声明和版本发布资料。
 
+[手机配对步骤](packages/swarm-mobile/README.md)涵盖同一局域网，以及通过 Tailscale 在移动数据下访问现有 Android 网关。
+
 ## 许可
 
 蜂群源码可免费使用和修改。对外发布或提供在线服务须遵守[蜂群源码可用许可证](LICENSE)。随仓的第三方组件按[各自的许可](THIRD_PARTY_NOTICES.md)使用。
