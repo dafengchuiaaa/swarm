@@ -6,7 +6,7 @@
  * 2. 宿主返回的会话 ID 由独立版自己记录，续接只认这里记的 ID。
  * 3. 回复里说"已生成"不算数——成果必须真实存在且能被打开，才登记为已核实。
  */
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { HostBridge, HostEvent, HostRunRequest } from '../../../swarm-hosts/src/hostBridge';
 import type { ArtifactRecord, RunRecord, SessionRecord, SwarmStore } from './store';
@@ -21,7 +21,6 @@ interface ActiveRun {
   workspace: string;
   seq: number;
   startedAt: number;
-  thinking: string;
   body: string;
   notices: string[];
   toolPaths: string[];
@@ -38,20 +37,19 @@ export interface ToolBinding {
 
 const TOOL_HOSTS = new Set(['CodeBuddy', 'Antigravity', 'Qoder']);
 
-const WINDOWS_PATH = /(?:[A-Za-z]:[\\/]|\\\\)[^\s"'`<>|*?\r\n]+/g;
+const ARTIFACT_PATH = /(["'`])((?:[A-Za-z]:[\\/]|\\\\|\.{1,2}[\\/])[^"'`<>|*?\r\n]+)\1|(?:[A-Za-z]:[\\/]|\\\\)[^\s"'`<>|*?\r\n]+/g;
 
 function normalise(candidate: string): string {
   return candidate.replace(/[),.;]+$/g, '').replace(/\\/g, path.sep);
 }
 
 function insideWorkspace(candidate: string, workspace: string): boolean {
-  const root = path.resolve(workspace).replace(/[\\/]+$/, '').toLowerCase();
-  const target = path.resolve(candidate).toLowerCase();
-  return target === root || target.startsWith(`${root}${path.sep}`);
+  const relative = path.relative(workspace, candidate);
+  return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
-function pathsInText(text: string): string[] {
-  return [...text.matchAll(WINDOWS_PATH)].map(match => normalise(match[0]));
+function pathsInText(text: string, workspace: string): string[] {
+  return [...text.matchAll(ARTIFACT_PATH)].map(match => path.resolve(workspace, match[2] ?? normalise(match[0])));
 }
 
 export class RunManager {
@@ -105,7 +103,6 @@ export class RunManager {
       workspace: effectiveWorkspace,
       seq: 0,
       startedAt: Date.now(),
-      thinking: '',
       body: '',
       notices: [],
       toolPaths: [],
@@ -179,11 +176,6 @@ export class RunManager {
     }
 
     switch (event.kind) {
-      case 'reasoning': {
-        const delta = typeof event.payload === 'string' ? event.payload : '';
-        run.thinking += delta;
-        break;
-      }
       case 'chunk': {
         const delta = typeof event.payload === 'string' ? event.payload : '';
         run.body += delta;
@@ -291,7 +283,7 @@ export class RunManager {
     for (const value of [rawInput, rawOutput]) {
       if (!value) continue;
       const text = typeof value === 'string' ? value : JSON.stringify(value);
-      for (const candidate of pathsInText(text)) run.toolPaths.push(candidate);
+      for (const candidate of pathsInText(text, run.workspace)) run.toolPaths.push(candidate);
     }
   }
 
@@ -336,27 +328,34 @@ export class RunManager {
 
   /** 只登记真实存在于工作区内的文件；目录、越界路径和不存在的一律不算成果。 */
   private registerArtifacts(active: ActiveRun, replyText: string): ArtifactRecord[] {
+    const candidates = [...pathsInText(replyText, active.workspace), ...active.toolPaths];
+    if (!candidates.length) return [];
+    let workspace: string;
+    try {
+      workspace = realpathSync.native(active.workspace);
+    } catch {
+      return [];
+    }
     const existing = new Set(this.store.listArtifacts(active.sessionId).map(item => item.path.toLowerCase()));
-    const candidates = [...pathsInText(replyText), ...active.toolPaths];
     const created: ArtifactRecord[] = [];
     for (const candidate of candidates) {
       if (created.length >= 20) break;
-      const resolved = path.resolve(candidate);
-      if (!insideWorkspace(resolved, active.workspace)) continue;
-      if (existing.has(resolved.toLowerCase())) continue;
+      if (!insideWorkspace(candidate, active.workspace)) continue;
       try {
-        const stat = statSync(resolved);
+        const realPath = realpathSync.native(candidate);
+        if (!insideWorkspace(realPath, workspace) || existing.has(realPath.toLowerCase())) continue;
+        const stat = statSync(realPath);
         if (!stat.isFile()) continue;
         const artifact = this.store.addArtifact({
           project_id: active.projectId,
           session_id: active.sessionId,
           run_id: active.runId,
-          name: path.basename(resolved),
-          path: resolved,
+          name: path.basename(candidate),
+          path: realPath,
           size: stat.size,
           verified: 1,
         });
-        existing.add(resolved.toLowerCase());
+        existing.add(realPath.toLowerCase());
         created.push(artifact);
       } catch {
         continue;
@@ -368,10 +367,10 @@ export class RunManager {
   /** 回复声称生成了文件、但磁盘上没有：明确报出来，不让"已完成"蒙混过去。 */
   private claimedButMissing(active: ActiveRun, replyText: string, artifacts: ArtifactRecord[]): string[] {
     const verified = new Set(artifacts.map(item => item.path.toLowerCase()));
-    return pathsInText(replyText)
+    return pathsInText(replyText, active.workspace)
       .filter(candidate => insideWorkspace(candidate, active.workspace))
-      .filter(candidate => !verified.has(path.resolve(candidate).toLowerCase()))
-      .filter(candidate => !existsSync(path.resolve(candidate)))
+      .filter(candidate => !verified.has(candidate.toLowerCase()))
+      .filter(candidate => !existsSync(candidate))
       .slice(0, 10);
   }
 }

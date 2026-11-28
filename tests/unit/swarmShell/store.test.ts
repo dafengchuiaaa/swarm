@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { SwarmStore } from '../../../packages/swarm-shell/src/main/store';
+import { RunManager } from '../../../packages/swarm-shell/src/main/runner';
+import { HostBridge } from '../../../packages/swarm-hosts/src/hostBridge';
+import { OWNER, TeamService, type TeamDeps } from '../../../packages/swarm-team/src/service';
 
 const dirs: string[] = [];
 
@@ -22,6 +25,68 @@ function seed(store: SwarmStore) {
   store.bindHostSession(session.id, 'host-session-1');
   return { project, session };
 }
+
+it('从 SQLite 恢复已有 256 条消息的项目后，仍能回复旧帖并再次恢复', () => {
+  const { dir, store } = openStore();
+  const { project } = seed(store);
+  function service(database: SwarmStore): TeamService {
+    return new TeamService({
+      project: id => database.project(id),
+      sessions: id => database.listSessions(id),
+      load: id => database.loadBusState(id) as ReturnType<TeamDeps['load']>,
+      save: (id, snapshot) => database.saveBusState(id, snapshot),
+    });
+  }
+  let rootId: string;
+  try {
+    const team = service(store);
+    [rootId] = team.post({ projectId: project.id, from: OWNER, text: '首帖' }).messageIds;
+    for (let index = 2; index <= 256; index += 1) {
+      team.post({ projectId: project.id, from: OWNER, text: `消息 ${index}` });
+    }
+  } finally {
+    store.close();
+  }
+
+  const reopened = new SwarmStore(dir);
+  try {
+    const team = service(reopened);
+    const [replyId] = team.post({ projectId: project.id, from: OWNER, text: '回复首帖', thread: rootId }).messageIds;
+    expect(service(reopened).thread(project.id, OWNER, rootId)?.replies.map(message => message.id)).toEqual([replyId]);
+    expect(service(reopened).bus(project.id).snapshot().messages).toHaveLength(257);
+  } finally {
+    reopened.close();
+  }
+});
+
+it('运行器按工作区解析标记过的相对产物路径并保留思考事件', async () => {
+  const { dir, store } = openStore();
+  try {
+    const project = store.createProject('成果验收', dir);
+    const session = store.createSession({ projectId: project.id, memberLabel: '开发', host: 'CodeBuddy', model: 'hy3' });
+    const report = path.join(dir, '验收 记录.md');
+    writeFileSync(report, '验收完成');
+    const bridge = new class extends HostBridge {
+      override async run(runId: string) {
+        this.emit('event', { runId, kind: 'reasoning', payload: '准备核对成果' });
+        this.emit('event', { runId, kind: 'chunk', payload: '交付 `./验收 记录.md`，待补 `./待补.md`。' });
+        return { text: '', sessionId: '', model: '', seconds: 0 };
+      }
+    }();
+    const finished = await new Promise<{ runId: string; missing: string[] }>((resolve, reject) => {
+      const runner = new RunManager(store, bridge, (channel, payload) => {
+        if (channel === 'run:done') resolve(payload as { runId: string; missing: string[] });
+        if (channel === 'run:error') reject(new Error((payload as { error: string }).error));
+      });
+      void runner.start({ projectId: project.id, sessionId: session.id, prompt: '登记验收文件' }).catch(reject);
+    });
+    expect(store.listArtifacts(session.id)).toMatchObject([{ path: realpathSync.native(report), verified: 1 }]);
+    expect(finished.missing).toEqual([path.join(dir, '待补.md')]);
+    expect(store.events(finished.runId).map(event => event.kind)).toEqual(['reasoning', 'chunk']);
+  } finally {
+    store.close();
+  }
+});
 
 describe('会话整理状态', () => {
   it('改名、置顶、分组、归档落库，重启后保持，且不改写成员和宿主续接 ID', () => {

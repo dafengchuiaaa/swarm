@@ -43,6 +43,34 @@ it('引用公开留言的派工只进信箱，新成员可自行回到原帖回�
   expect(team.artifacts('p1')[0].name).toBe('验收记录');
 });
 
+it('空信箱和重复回执跳过保存，先前保存失败时仍重试写入', () => {
+  let saves = 0;
+  let failSave = false;
+  const team = new TeamService({
+    project: id => ({ id, name: '验收', workspace: 'D:/work/repo' }),
+    sessions: () => [{ id: 'dev', member_label: '开发', host: 'CodeBuddy', model: 'hy3', host_session_id: null }],
+    load: () => undefined,
+    save: () => {
+      if (failSave) throw new Error('保存失败');
+      saves += 1;
+    },
+  });
+  const [id] = team.post({ projectId: 'p1', from: OWNER, to: 'dev', text: '请检查' }).messageIds;
+  const initialSaves = saves;
+  expect(team.takeInbox('p1', 'dev').map(message => message.id)).toEqual([id]);
+  expect(saves).toBe(initialSaves + 1);
+  expect(team.takeInbox('p1', 'dev')).toEqual([]);
+  expect(saves).toBe(initialSaves + 1);
+
+  failSave = true;
+  expect(() => team.ack('p1', 'dev', [id])).toThrow('保存失败');
+  failSave = false;
+  team.ack('p1', 'dev', [id]);
+  expect(saves).toBe(initialSaves + 2);
+  team.ack('p1', 'dev', [id]);
+  expect(saves).toBe(initialSaves + 2);
+});
+
 describe('swarm-team 的协作总线', () => {
   it('子任务回传只唤醒发起会话一次，忙时顺序保留，重启后按 ID 读取结果', () => {
     const team = bus();
@@ -164,10 +192,21 @@ describe('swarm-team 的协作总线', () => {
     );
   });
 
-  it('恢复已满的消息账本后，仍可原样重试已成功的事件', () => {
+  it('未提供 eventId 的消息不占用幂等记录', () => {
     const team = bus();
-    const envelope = JSON.stringify({ result: '完成初版', messages: [{ to: 'lead', text: '初版已提交' }] });
-    for (let index = 1; index <= 256; index += 1) {
+    const envelope = JSON.stringify({ result: '进度', messages: [{ to: 'all', text: '已经开始' }] });
+    team.accept('dev', envelope);
+    team.accept('dev', envelope);
+    const state = team.snapshot();
+    expect(state.messages).toHaveLength(2);
+    expect(state.processed).toEqual({});
+  });
+
+  it('从 256 条消息的旧账本恢复后，可重试已成功的事件并回复旧帖', () => {
+    const team = bus();
+    const envelope = JSON.stringify({ result: '完成初版', messages: [{ to: 'all', text: '初版已提交' }] });
+    const [rootId] = team.accept('dev', envelope, { eventId: 'evt-1' }).messageIds;
+    for (let index = 2; index <= 256; index += 1) {
       team.accept('dev', envelope, { eventId: `evt-${index}` });
     }
     const state = team.snapshot();
@@ -179,9 +218,13 @@ describe('swarm-team 的协作总线', () => {
     });
     expect(() => restored.accept('dev', envelope.replace('初版已提交', '修改版已提交'), lastEvent))
       .toThrow('重复投递的内容发生变化');
-    expect(() => restored.accept('dev', envelope, { eventId: 'evt-257' }))
-      .toThrow('本轮协作消息达到上限');
-    expect(restored.snapshot().messages).toHaveLength(256);
+    const reply = JSON.stringify({
+      result: '已复核',
+      messages: [{ to: 'all', text: '已复核', thread: rootId }],
+    });
+    const [replyId] = restored.accept('lead', reply, { eventId: 'evt-257' }).messageIds;
+    expect(restored.threadView('qa', rootId)?.replies.map(message => message.id)).toEqual([replyId]);
+    expect(restored.snapshot().messages).toHaveLength(257);
   });
 
   it('群发落项目频道，点对点自动落双方私信频道', () => {

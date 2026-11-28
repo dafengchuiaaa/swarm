@@ -183,7 +183,6 @@ export interface AcceptResult {
 const MAX_MESSAGES = 8;
 const MAX_UPDATES = 8;
 const MAX_MESSAGE_CHARS = 8000;
-const MAX_LEDGER = 256;
 const PREVIEW_CHARS = 1200;
 const PREVIEW_BUDGET = 4000;
 
@@ -209,6 +208,7 @@ export class CollaborationBus {
   private readonly members: BusMember[];
   private readonly workspace?: string;
   private state: BusState;
+  private readonly messagesById: Map<string, BusMessage>;
 
   constructor(
     members: BusMember[],
@@ -229,6 +229,7 @@ export class CollaborationBus {
       dispatches: [],
       cursors: {},
     };
+    this.messagesById = new Map(this.state.messages.map(message => [message.id, message]));
     // 旧快照没有游标与派工 id：补齐默认值，避免恢复后读上下文从"全量"重来一遍。
     this.state.cursors ??= {};
     this.state.dispatches ??= [];
@@ -332,7 +333,7 @@ export class CollaborationBus {
         fail('点对点消息必须走收发双方的私信频道');
       }
       if (message.thread !== undefined) {
-        const root = this.state.messages.find(item => item.id === message.thread);
+        const root = this.messagesById.get(message.thread);
         if (!root) fail('讨论串不存在；未投递');
         if (!this.visibleTo(root, sender)) fail('不能在看不到的讨论串里回复');
         if (root.channel !== channel) fail('讨论串和频道不一致');
@@ -356,26 +357,30 @@ export class CollaborationBus {
     const artifacts = this.prepareArtifacts(sender, envelope.artifacts ?? []);
 
     // ---- 幂等：同一 event 同内容直接返回原结论；内容变了必须报错
-    const eventId = ticket?.eventId ?? shortId();
-    const dedupeKey = `${this.runId}:${sender}:${eventId}`;
-    const digest = createHash('sha256').update(text, 'utf8').digest('hex');
-    const previous = this.state.processed[dedupeKey];
-    if (previous) {
-      if (previous !== digest) fail('重复投递的内容发生变化，未处理');
-      return { result, messageIds: [], artifactIds: [], conflicts: [] };
+    const eventId = ticket?.eventId;
+    const dedupe = eventId == null ? undefined : {
+      key: `${this.runId}:${sender}:${eventId}`,
+      digest: createHash('sha256').update(text, 'utf8').digest('hex'),
+    };
+    if (dedupe) {
+      const previous = this.state.processed[dedupe.key];
+      if (previous) {
+        if (previous !== dedupe.digest) fail('重复投递的内容发生变化，未处理');
+        return { result, messageIds: [], artifactIds: [], conflicts: [] };
+      }
     }
-
-    if (this.state.messages.length + messages.length + updates.length > MAX_LEDGER) fail('本轮协作消息达到上限');
 
     // ---- 发布
     const messageIds = messages.map(() => shortId());
     const storedArtifacts = artifacts.map(artifact => this.storeArtifact(artifact, sender));
     const artifactIds = storedArtifacts.map(artifact => artifact.id);
+    const previousArtifacts = messages.length
+      ? this.state.artifacts.filter(artifact => artifact.runId === this.runId && artifact.owner === sender)
+      : [];
     messages.forEach((message, index) => {
       const related = [
         ...artifactIds,
-        ...this.state.artifacts
-          .filter(artifact => artifact.runId === this.runId && artifact.owner === sender)
+        ...previousArtifacts
           .filter(artifact => message.text.includes(artifact.id) || message.text.includes(artifact.name))
           .map(artifact => artifact.id),
       ];
@@ -395,10 +400,8 @@ export class CollaborationBus {
     });
 
     // 任务报告：先应用根更新，再应用随消息携带的更新（与旧蜂群顺序一致）
-    this.applyReports(sender, prepared, `event:${eventId}`);
-    messages.forEach((message, index) => {
-      this.applyReports(sender, preparedPerMessage[index], `message:${messageIds[index]}`);
-    });
+    this.applyReports(sender, prepared);
+    for (const reports of preparedPerMessage) this.applyReports(sender, reports);
 
     // 共享板：版本对不上就记冲突，绝不覆盖
     const conflicts: BoardConflict[] = [];
@@ -441,7 +444,7 @@ export class CollaborationBus {
     }
 
     for (const artifact of storedArtifacts) this.state.artifacts.push(artifact);
-    this.state.processed[dedupeKey] = digest;
+    if (dedupe) this.state.processed[dedupe.key] = dedupe.digest;
     return { result, messageIds, artifactIds, conflicts };
   }
 
@@ -456,7 +459,7 @@ export class CollaborationBus {
   ): void {
     const channel = input.channel ?? (input.to !== 'all' && input.to !== 'system' ? dmChannel(input.sender, input.to) : this.channelId);
     const publicReply = this.isGroupChannel(channel) && input.threadId && !input.requiresAction;
-    const rootAuthor = publicReply ? this.state.messages.find(message => message.id === input.threadId)?.sender : undefined;
+    const rootAuthor = publicReply && input.threadId ? this.messagesById.get(input.threadId)?.sender : undefined;
     const recipients = publicReply
       ? this.members.filter(member => member.id === rootAuthor && member.id !== input.sender).map(member => member.id)
       : input.to === 'all'
@@ -464,7 +467,7 @@ export class CollaborationBus {
       : [input.to];
     const receipts: Record<string, ReceiptState> = {};
     for (const recipient of recipients) receipts[recipient] = input.requiresAction ? 'queued' : 'available';
-    this.state.messages.push({
+    const message: BusMessage = {
       ...input,
       runId: this.runId,
       time: now(),
@@ -472,7 +475,9 @@ export class CollaborationBus {
       channel,
       threadId: input.threadId,
       evidence: input.evidence ?? [],
-    });
+    };
+    this.state.messages.push(message);
+    this.messagesById.set(message.id, message);
     if (input.requiresAction) {
       for (const recipient of recipients) {
         const task = this.taskOf(recipient);
@@ -528,7 +533,7 @@ export class CollaborationBus {
     });
   }
 
-  private applyReports(sender: string, prepared: { taskId: string; fields: Partial<BusTask> }[], source: string): void {
+  private applyReports(sender: string, prepared: { taskId: string; fields: Partial<BusTask> }[]): void {
     for (const { taskId, fields } of prepared) {
       const task = this.state.tasks[taskId];
       const unchanged = Object.entries(fields).every(([key, value]) => JSON.stringify(task[key as keyof BusTask]) === JSON.stringify(value));
@@ -781,7 +786,7 @@ export class CollaborationBus {
     if (!dispatch || dispatch.status === 'done' || dispatch.status === 'failed') return undefined;
     this.markDispatch(id, outcome);
     if (dispatch.reason !== 'task_message') return undefined;
-    const request = this.state.messages.find(message => message.id === dispatch.messageId);
+    const request = dispatch.messageId ? this.messagesById.get(dispatch.messageId) : undefined;
     const sender = request?.sender;
     if (!sender || sender === 'owner' || !this.members.some(member => member.id === sender)) return undefined;
     const messageId = `W-${id}`;
@@ -798,7 +803,7 @@ export class CollaborationBus {
   wakeupNeeded(id: string): boolean {
     const dispatch = this.state.dispatches.find(item => item.id === id);
     if (dispatch?.reason !== 'dispatch_result') return true;
-    return this.state.messages.find(message => message.id === id)?.receipts[dispatch.owner] !== 'processed';
+    return this.messagesById.get(id)?.receipts[dispatch.owner] !== 'processed';
   }
 
   resultInbox(memberId: string) {
@@ -819,20 +824,24 @@ export class CollaborationBus {
       && (item.reason === 'task_message' || item.reason === 'dispatch_result')
       && (item.status === 'queued' || item.status === 'running' || item.status === 'claimed'));
     if (!direct.length) return [];
-    const messages = new Map(this.state.messages.map(message => [message.id, message]));
     return direct.flatMap(dispatch => {
-      const message = messages.get(dispatch.messageId!);
+      const message = this.messagesById.get(dispatch.messageId!);
       return message?.to === dispatch.owner && (message.requiresAction || message.resultOf)
         ? [{ dispatch: structuredClone(dispatch), text: message.text }]
         : [];
     });
   }
 
-  ack(memberId: string, messageIds: string[]): void {
-    const wanted = new Set(messageIds);
-    for (const message of this.state.messages) {
-      if (wanted.has(message.id) && message.receipts[memberId]) message.receipts[memberId] = 'processed';
+  ack(memberId: string, messageIds: string[]): boolean {
+    let changed = false;
+    for (const id of messageIds) {
+      const message = this.messagesById.get(id);
+      const receipt = message?.receipts[memberId];
+      if (!message || !receipt || receipt === 'processed') continue;
+      message.receipts[memberId] = 'processed';
+      changed = true;
     }
+    return changed;
   }
 
   /** 本轮收尾：已排队但没开跑的派工继续留在队列（由下次回合接起），执行中的标未知——都不假装成功。 */
@@ -960,9 +969,9 @@ export class CollaborationBus {
   }
 
   threadView(viewer: string, rootId: string): { root: BusMessage; replies: BusMessage[] } | undefined {
-    const target = this.state.messages.find(message => message.id === rootId);
+    const target = this.messagesById.get(rootId);
     if (!target || !this.visibleTo(target, viewer)) return undefined;
-    const root = target.threadId ? this.state.messages.find(message => message.id === target.threadId) : target;
+    const root = target.threadId ? this.messagesById.get(target.threadId) : target;
     if (!root || !this.visibleTo(root, viewer)) return undefined;
     const replies = this.state.messages.filter(message => message.threadId === root.id && this.visibleTo(message, viewer));
     return { root, replies };

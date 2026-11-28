@@ -58,6 +58,7 @@ export const defaultChannel = (projectId: string): string => `ch:${projectId}:ma
 
 export class TeamService {
   private readonly cache = new Map<string, CollaborationBus>();
+  private readonly unsavedBuses = new WeakSet<CollaborationBus>();
   private readonly busKeys = new WeakMap<CollaborationBus, string>();
 
   constructor(private readonly deps: TeamDeps) {}
@@ -148,7 +149,9 @@ export class TeamService {
     // New keys are derived from the project and task group, even for an existing legacy channel ID.
     const key = this.busKeys.get(bus);
     if (!key) throw new Error('协作总线尚未绑定');
+    this.unsavedBuses.add(bus);
     this.deps.save(key, { channelId: bus.channelId, runId: bus.runId, state: bus.snapshot() });
+    this.unsavedBuses.delete(bus);
   }
 
   refreshMembers(projectId: string): void {
@@ -284,7 +287,7 @@ export class TeamService {
   takeInbox(projectId: string, memberId: string, limit = 16): BusMessage[] {
     const bus = this.bus(projectId, memberId);
     const messages = bus.takeInbox(memberId, limit);
-    this.persist(bus);
+    if (messages.length || this.unsavedBuses.has(bus)) this.persist(bus);
     return messages;
   }
 
@@ -297,8 +300,7 @@ export class TeamService {
 
   ack(projectId: string, memberId: string, messageIds: string[]): void {
     const bus = this.bus(projectId, memberId);
-    bus.ack(memberId, messageIds);
-    this.persist(bus);
+    if (bus.ack(memberId, messageIds) || this.unsavedBuses.has(bus)) this.persist(bus);
   }
 
   board(projectId: string, sessionId?: string): Record<string, BoardEntry> {

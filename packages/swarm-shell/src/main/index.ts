@@ -1160,7 +1160,9 @@ async function pumpQueue(sessionId: string): Promise<void> {
   if (!item) return;
   if (!team.wakeupNeeded(item.projectId, item.id)) {
     dispatchQueue.settleById(item.id, 'done');
-    team.markDispatch(item.projectId, item.id, { status: 'done' });
+    if (team.markDispatch(item.projectId, item.id, { status: 'done' })) {
+      dispatchQueue.discardSettled(item.id);
+    }
     return pumpQueue(sessionId);
   }
   const session = store.session(target);
@@ -1211,6 +1213,7 @@ function handoffMember(sessionId: string, decision: CompactionDecision): void {
 
 function finishQueuedDispatch(projectId: string, id: string, outcome: { status: 'done' | 'failed'; runId?: string; error?: string }): void {
   const wake = team.finishDispatch(projectId, id, outcome);
+  if (team.dispatchOf(projectId, id)?.status === outcome.status) dispatchQueue.discardSettled(id);
   if (wake) void dispatchToMember({ projectId, ...wake }).catch(error =>
     logLine(`续接 ${wake.messageId} 失败：${(error as Error).message}`));
 }

@@ -47,4 +47,26 @@ describe('派工队列', () => {
     expect(queue.takeNext('s1')?.id).toBe('m1');
     expect(queue.takeNext('s2')?.id).toBe('m2');
   });
+
+  it('只释放已落盘的终态项，旧回合的结果不会影响重派', () => {
+    const queue = new DispatchQueue();
+    const task = { id: 'm1', projectId: 'p1', sessionId: 's1', text: '做 A' };
+    queue.add(task);
+    queue.discardSettled(task.id);
+    expect(queue.pending('s1')).toBe(1);
+    expect(queue.settleById(task.id, 'done')).toBeUndefined();
+    queue.takeNext('s1');
+    queue.assign(task.id, 'R-1');
+    queue.discardSettled(task.id);
+    expect(queue.settle('R-1', 'failed')?.id).toBe(task.id);
+    queue.discardSettled(task.id);
+    expect(queue.get(task.id)).toBeUndefined();
+
+    queue.add(task);
+    queue.takeNext('s1');
+    queue.assign(task.id, 'R-2');
+    expect(queue.settle('R-1', 'done')).toBeUndefined();
+    expect(queue.running('s1')?.runId).toBe('R-2');
+    expect(queue.settle('R-2', 'done')?.id).toBe(task.id);
+  });
 });
