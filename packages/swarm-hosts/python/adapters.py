@@ -1085,6 +1085,21 @@ def swarm_mcp_servers(tools):
     return servers
 
 
+def acp_mcp_servers(tools, label, init):
+    capabilities = (init.get('agentCapabilities') or {}).get('mcpCapabilities') or {}
+    servers = []
+    for name, server in swarm_mcp_servers(tools).items():
+        env = server.get('env') or {}
+        url, token = env.get('SWARM_BUS_URL'), env.get('SWARM_BUS_TOKEN')
+        if name == 'swarm' and label == 'Qoder' and capabilities.get('http') and url and token:
+            servers.append({'type': 'http', 'name': name, 'url': f'{url}/mcp',
+                            'headers': [{'name': 'Authorization', 'value': f'Bearer {token}'}]})
+        else:
+            servers.append({'name': name, 'command': server['command'], 'args': list(server.get('args') or []),
+                            'env': [{'name': key, 'value': str(value)} for key, value in env.items()]})
+    return servers
+
+
 def run_workbuddy(prompt, session_id, model, emit, cancel, timeout=120, *, _standalone=False, effort='',
 
 
@@ -1878,11 +1893,7 @@ def run_acp(command, env, label, mode, prompt, session_id, model, effort, emit, 
 
         params = {
             'cwd': str(workspace or ROOT / 'workspace'),
-            'mcpServers': [
-                {'name': name, 'command': server['command'], 'args': list(server.get('args') or []),
-                 'env': [{'name': key, 'value': str(value)} for key, value in (server.get('env') or {}).items()]}
-                for name, server in swarm_mcp_servers(tools).items()
-            ],
+            'mcpServers': acp_mcp_servers(tools, label, init),
         }
 
 

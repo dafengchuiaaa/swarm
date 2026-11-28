@@ -7,8 +7,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { randomUUID } from 'node:crypto';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { OWNER, type TeamService } from '../../../swarm-team/src/service';
 import type { BusCursor, BusMessage } from '../../../swarm-team/src/collaborationBus';
+import { serveSwarmMcp } from './mcpHttp';
 
 const OPENING_INBOX_LIMIT = 8;
 
@@ -20,13 +22,7 @@ interface Identity {
   confirmedContext?: string;
 }
 
-interface ToolSpec {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-}
-
-const TOOLS: ToolSpec[] = [
+const TOOLS: Tool[] = [
   {
     name: 'swarm_context',
     description: '读取自上次确认以来新增的上下文。收到 context_receipt 后用 swarm_ack 确认本页送达；消息全文用 swarm_read 回读。',
@@ -290,6 +286,18 @@ export class BusGateway {
         return;
       }
       try {
+        if (request.url === '/mcp') {
+          if (request.headers.origin && request.headers.origin !== this.url) {
+            response.writeHead(403).end();
+            return;
+          }
+          await serveSwarmMcp(request, response, TOOLS, async (name, args) => {
+            const result = await this.call(identity, name, args);
+            this.onChanged?.(identity.projectId);
+            return result;
+          });
+          return;
+        }
         if (request.method === 'GET' && request.url === '/tools') {
           response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true, tools: TOOLS }));
           return;
@@ -304,9 +312,10 @@ export class BusGateway {
         this.onChanged?.(identity.projectId);
         response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true, ...result }));
       } catch (error) {
-        response.writeHead(200, { 'content-type': 'application/json' }).end(
-          JSON.stringify({ ok: false, error: (error as Error).message }),
-        );
+        if (response.headersSent) response.end();
+        else response.writeHead(200, { 'content-type': 'application/json' }).end(
+            JSON.stringify({ ok: false, error: (error as Error).message }),
+          );
       }
   }
 
