@@ -492,13 +492,14 @@ export class BusGateway {
       case 'swarm_ack': {
         const ids = Array.isArray(args.message_ids) ? args.message_ids.map(String) : [];
         const receipt = args.context_receipt ?? args.receipt;
-        if (receipt && receipt !== identity.confirmedContext) {
-          if (identity.context?.id !== receipt) throw new Error('上下文回执已失效，请重新读取增量');
-          team.confirmContext(projectId, memberId, identity.context.cursor);
-          identity.confirmedContext = identity.context.id;
+        const needsConfirmation = receipt && receipt !== identity.confirmedContext;
+        const context = needsConfirmation ? identity.context : undefined;
+        if (needsConfirmation && context?.id !== receipt) throw new Error('上下文回执已失效，请重新读取增量');
+        if (context || ids.length) team.ack(projectId, memberId, ids, context?.cursor);
+        if (context) {
+          identity.confirmedContext = context.id;
           identity.context = undefined;
         }
-        if (ids.length) team.ack(projectId, memberId, ids);
         return { text: `${receipt ? '已确认收到上下文。' : ''}${ids.length || !receipt ? `已确认处理 ${ids.length} 条消息。` : ''}` };
       }
       case 'swarm_board_read': {

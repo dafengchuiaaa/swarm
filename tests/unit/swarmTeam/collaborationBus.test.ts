@@ -96,9 +96,11 @@ describe('swarm-team 的协作总线', () => {
     const [child] = team.accept('lead', JSON.stringify({
       result: '核对', messages: [{ to: 'dev', text: '核对', requires_action: true }],
     })).messageIds;
-    const wake = team.finishDispatch(child, { status: 'done', runId: 'R-child' })!;
+    const result = team.finishDispatch(child, { status: 'done', runId: 'R-child' });
+    expect(result?.status).toBe('done');
+    const wake = result!.wakeup!;
     expect(wake.memberId).toBe('lead');
-    expect(team.finishDispatch(child, { status: 'done', runId: 'R-child' })).toBeUndefined();
+    expect(team.finishDispatch(child, { status: 'failed', error: '重复收尾' })).toEqual({ status: 'done' });
     const restored = new CollaborationBus(members, {
       workspace: 'D:/work/repo', channelId: team.channelId, runId: team.runId, state: team.snapshot(),
     });
@@ -124,7 +126,7 @@ describe('swarm-team 的协作总线', () => {
     restored.ack('lead', [wake.messageId]);
     expect(restored.wakeupNeeded(wake.messageId)).toBe(false);
     expect(restored.resultInbox('lead')).toMatchObject([{ id: wake.messageId, processed: true }]);
-    expect(restored.finishDispatch(wake.messageId, { status: 'done', runId: 'R-parent' })).toBeUndefined();
+    expect(restored.finishDispatch(wake.messageId, { status: 'done', runId: 'R-parent' })).toEqual({ status: 'done' });
     expect(restored.recoverableDispatches()).toEqual([]);
   });
 
@@ -133,7 +135,9 @@ describe('swarm-team 的协作总线', () => {
     const [child] = team.accept('lead', JSON.stringify({
       result: '核对', messages: [{ to: 'dev', text: '核对', requires_action: true }],
     })).messageIds;
-    const wake = team.finishDispatch(child, { status: 'failed', error: '宿主不可用' })!;
+    const result = team.finishDispatch(child, { status: 'failed', error: '宿主不可用' });
+    expect(result?.status).toBe('failed');
+    const wake = result!.wakeup!;
     expect(team.readMessages('lead', [wake.messageId])[0]?.text).toContain('宿主不可用');
     expect(team.resultInbox('lead')).toMatchObject([{ id: wake.messageId, processed: false }]);
   });

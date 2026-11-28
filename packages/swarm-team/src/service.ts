@@ -301,9 +301,11 @@ export class TeamService {
     ).length;
   }
 
-  ack(projectId: string, memberId: string, messageIds: string[]): void {
+  ack(projectId: string, memberId: string, messageIds: string[], cursor?: BusCursor): void {
     const bus = this.bus(projectId, memberId);
-    if (bus.ack(memberId, messageIds) || this.unsavedBuses.has(bus)) this.persist(bus);
+    if (cursor) bus.confirmContext(memberId, cursor);
+    const messagesChanged = bus.ack(memberId, messageIds);
+    if (cursor || messagesChanged || this.unsavedBuses.has(bus)) this.persist(bus);
   }
 
   board(projectId: string, sessionId?: string): Record<string, BoardEntry> {
@@ -439,12 +441,6 @@ export class TeamService {
     };
   }
 
-  confirmContext(projectId: string, memberId: string, cursor: BusCursor): void {
-    const bus = this.bus(projectId, memberId);
-    bus.confirmContext(memberId, cursor);
-    this.persist(bus);
-  }
-
   readMessages(projectId: string, memberId: string, ids: string[], maxChars?: number, offset = 0) {
     return this.bus(projectId, memberId)
       .readMessages(memberId, ids, maxChars, offset, this.deps.readRunResult)
@@ -464,11 +460,12 @@ export class TeamService {
   }
 
   finishDispatch(projectId: string, id: string, outcome: { status: 'done' | 'failed'; runId?: string; error?: string }) {
-    const bus = this.projectBuses(projectId).find(item => item.dispatchOf(id));
-    if (!bus) return undefined;
-    const wakeup = bus.finishDispatch(id, outcome);
-    this.persist(bus);
-    return wakeup;
+    for (const bus of this.projectBuses(projectId)) {
+      const result = bus.finishDispatch(id, outcome);
+      if (!result) continue;
+      this.persist(bus);
+      return result;
+    }
   }
 
   wakeupNeeded(projectId: string, id: string): boolean {

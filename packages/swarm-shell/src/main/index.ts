@@ -1098,11 +1098,12 @@ function restoreDispatchQueue(): void {
         continue;
       }
       const run = dispatch.runId ? store.run(dispatch.runId) : undefined;
-      const wake = team.finishDispatch(projectId, dispatch.id, {
+      const result = team.finishDispatch(projectId, dispatch.id, {
         status: run?.status === 'done' ? 'done' : 'failed',
         runId: run?.id,
         error: run?.status === 'done' ? undefined : run?.error || '进程重启，本轮中断',
       });
+      const wake = result?.wakeup;
       if (wake) {
         dispatchQueue.add({ id: wake.messageId, projectId, sessionId: wake.memberId, text: wake.text });
         sessions.add(wake.memberId);
@@ -1212,8 +1213,9 @@ function handoffMember(sessionId: string, decision: CompactionDecision): void {
 }
 
 function finishQueuedDispatch(projectId: string, id: string, outcome: { status: 'done' | 'failed'; runId?: string; error?: string }): void {
-  const wake = team.finishDispatch(projectId, id, outcome);
-  if (team.dispatchOf(projectId, id)?.status === outcome.status) dispatchQueue.discardSettled(id);
+  const result = team.finishDispatch(projectId, id, outcome);
+  if (result?.status === outcome.status) dispatchQueue.discardSettled(id);
+  const wake = result?.wakeup;
   if (wake) void dispatchToMember({ projectId, ...wake }).catch(error =>
     logLine(`续接 ${wake.messageId} 失败：${(error as Error).message}`));
 }

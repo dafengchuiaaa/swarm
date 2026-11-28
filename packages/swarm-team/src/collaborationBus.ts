@@ -781,14 +781,19 @@ export class CollaborationBus {
   }
 
   /** 结束子任务和登记续接一次落库。续接本身不是子任务，不会再次触发通知。 */
-  finishDispatch(id: string, outcome: { status: 'done' | 'failed'; runId?: string; error?: string }) {
+  finishDispatch(
+    id: string,
+    outcome: { status: 'done' | 'failed'; runId?: string; error?: string },
+  ): { status: 'done' | 'failed'; wakeup?: { memberId: string; messageId: string; text: string } } | undefined {
     const dispatch = this.state.dispatches.find(item => item.id === id);
-    if (!dispatch || dispatch.status === 'done' || dispatch.status === 'failed') return undefined;
-    this.markDispatch(id, outcome);
-    if (dispatch.reason !== 'task_message') return undefined;
+    if (!dispatch) return undefined;
+    if (dispatch.status === 'done' || dispatch.status === 'failed') return { status: dispatch.status };
+    const { status } = outcome;
+    Object.assign(dispatch, outcome, { updated: now() });
+    if (dispatch.reason !== 'task_message') return { status };
     const request = dispatch.messageId ? this.messagesById.get(dispatch.messageId) : undefined;
     const sender = request?.sender;
-    if (!sender || sender === 'owner' || !this.members.some(member => member.id === sender)) return undefined;
+    if (!sender || sender === 'owner' || !this.members.some(member => member.id === sender)) return { status };
     const messageId = `W-${id}`;
     const text = `子任务 ${id} ${outcome.status === 'done' ? '完成' : '失败'}。`;
     this.publish({
@@ -797,7 +802,7 @@ export class CollaborationBus {
     });
     this.state.dispatches.push({ id: messageId, messageId, owner: sender, status: 'queued',
       taskId: this.taskOf(sender)?.id ?? '', reason: 'dispatch_result', updated: now() });
-    return { memberId: sender, messageId, text };
+    return { status, wakeup: { memberId: sender, messageId, text } };
   }
 
   wakeupNeeded(id: string): boolean {
