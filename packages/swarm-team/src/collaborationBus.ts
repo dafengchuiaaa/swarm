@@ -354,7 +354,6 @@ export class CollaborationBus {
     const prepared = this.prepareReports(sender, envelope.task_updates ?? []);
     const preparedPerMessage = messages.map(message => this.prepareReports(sender, message.task_updates ?? []));
     const artifacts = this.prepareArtifacts(sender, envelope.artifacts ?? []);
-    if (this.state.messages.length + messages.length + updates.length > MAX_LEDGER) fail('本轮协作消息达到上限');
 
     // ---- 幂等：同一 event 同内容直接返回原结论；内容变了必须报错
     const eventId = ticket?.eventId ?? shortId();
@@ -365,6 +364,8 @@ export class CollaborationBus {
       if (previous !== digest) fail('重复投递的内容发生变化，未处理');
       return { result, messageIds: [], artifactIds: [], conflicts: [] };
     }
+
+    if (this.state.messages.length + messages.length + updates.length > MAX_LEDGER) fail('本轮协作消息达到上限');
 
     // ---- 发布
     const messageIds = messages.map(() => shortId());

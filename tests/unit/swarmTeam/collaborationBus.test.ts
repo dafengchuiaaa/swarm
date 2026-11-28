@@ -164,6 +164,26 @@ describe('swarm-team 的协作总线', () => {
     );
   });
 
+  it('恢复已满的消息账本后，仍可原样重试已成功的事件', () => {
+    const team = bus();
+    const envelope = JSON.stringify({ result: '完成初版', messages: [{ to: 'lead', text: '初版已提交' }] });
+    for (let index = 1; index <= 256; index += 1) {
+      team.accept('dev', envelope, { eventId: `evt-${index}` });
+    }
+    const state = team.snapshot();
+    const restored = new CollaborationBus(members, { channelId: team.channelId, runId: team.runId, state });
+    const lastEvent = { eventId: 'evt-256' };
+
+    expect(restored.accept('dev', envelope, lastEvent)).toEqual({
+      result: '完成初版', messageIds: [], artifactIds: [], conflicts: [],
+    });
+    expect(() => restored.accept('dev', envelope.replace('初版已提交', '修改版已提交'), lastEvent))
+      .toThrow('重复投递的内容发生变化');
+    expect(() => restored.accept('dev', envelope, { eventId: 'evt-257' }))
+      .toThrow('本轮协作消息达到上限');
+    expect(restored.snapshot().messages).toHaveLength(256);
+  });
+
   it('群发落项目频道，点对点自动落双方私信频道', () => {
     const team = bus();
     team.accept('dev', JSON.stringify({
